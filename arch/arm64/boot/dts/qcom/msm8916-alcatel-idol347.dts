@@ -65,6 +65,17 @@
 		};
 	};
 
+	reg_headphones_avdd: regulator-headphones-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "headphones_avdd";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&tlmm 121 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		pinctrl-names = "default";
+		pinctrl-0 = <&headphones_avdd_default>;
+	};
+
 	usb_id: usb-id {
 		compatible = "linux,extcon-usb-gpio";
 		id-gpios = <&tlmm 69 GPIO_ACTIVE_HIGH>;
@@ -75,6 +86,17 @@
 
 &blsp_i2c3 {
 	status = "okay";
+
+	headphones: audio-codec@10 {
+		compatible = "asahi-kasei,ak4375";
+		reg = <0x10>;
+		avdd-supply = <&reg_headphones_avdd>;
+		tvdd-supply = <&pm8916_l6>;
+		pdn-gpios = <&tlmm 114 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&headphones_pdn_default>;
+		#sound-dai-cells = <0>;
+	};
 
 	speaker_codec_top: audio-codec@34 {
 		compatible = "nxp,tfa9897";
@@ -223,6 +245,11 @@
 };
 
 &q6afedai {
+	dai@18 {
+		reg = <SECONDARY_MI2S_RX>;
+		qcom,sd-lines = <0>;
+	};
+
 	dai@22 {
 		reg = <QUATERNARY_MI2S_RX>;
 		qcom,sd-lines = <0>;
@@ -259,12 +286,14 @@
 		"AMIC3", "MIC BIAS External1";
 
 	pinctrl-names = "default", "sleep";
-	pinctrl-0 = <&cdc_pdm_default &sec_mi2s_default>;
-	pinctrl-1 = <&cdc_pdm_sleep &sec_mi2s_sleep>;
+	pinctrl-0 = <&cdc_pdm_default &pri_mi2s_default &pri_mi2s_ws_default>,
+		    <&sec_mi2s_default>;
+	pinctrl-1 = <&cdc_pdm_sleep &pri_mi2s_sleep &pri_mi2s_ws_sleep>,
+		    <&sec_mi2s_sleep>;
 };
 
 &sound_dai_primary {
-	/* unused primary link is kept so we can use same UCM with modem */
+	status = "disabled";
 };
 
 &sound_dai_quaternary {
@@ -272,6 +301,14 @@
 
 	codec {
 		sound-dai = <&speaker_codec_top>, <&speaker_codec_bottom>;
+	};
+};
+
+&sound_dai_secondary {
+	status = "okay";
+
+	codec {
+		sound-dai = <&headphones>;
 	};
 };
 
@@ -304,6 +341,14 @@
 	status = "okay";
 };
 
+/* Only some of the pins are used */
+&pri_mi2s_default {
+	pins = "gpio113", "gpio115";
+};
+&pri_mi2s_sleep {
+	pins = "gpio113", "gpio115";
+};
+
 &tlmm {
 	accel_int_default: accel-int-default-state {
 		pins = "gpio31";
@@ -331,6 +376,22 @@
 
 	gyro_int_default: gyro-int-default-state {
 		pins = "gpio97", "gpio98";
+		function = "gpio";
+
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	headphones_avdd_default: headphones-avdd-default-state {
+		pins = "gpio121";
+		function = "gpio";
+
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	headphones_pdn_default: headphones-pdn-default-state {
+		pins = "gpio114";
 		function = "gpio";
 
 		drive-strength = <2>;
