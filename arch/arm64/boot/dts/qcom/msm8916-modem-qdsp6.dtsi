@@ -9,6 +9,7 @@
 
 #include <dt-bindings/sound/qcom,q6afe.h>
 #include <dt-bindings/sound/qcom,q6asm.h>
+#include <dt-bindings/sound/qcom,q6voice.h>
 
 &apr {
 	status = "okay";
@@ -110,6 +111,13 @@
 		link-name = "MultiMedia4";
 		cpu {
 			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA4>;
+		};
+	};
+
+	cs-voice-dai-link {
+		link-name = "CS-Voice";
+		cpu {
+			sound-dai = <&q6voicedai CS_VOICE>;
 		};
 	};
 
