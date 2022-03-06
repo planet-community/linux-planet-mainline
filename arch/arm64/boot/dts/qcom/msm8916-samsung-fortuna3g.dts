@@ -21,3 +21,11 @@
 &mpss_mem {
 	size = <0x0 0x5000000>;
 };
+
+&st_accel {
+	status = "okay";
+};
+
+&st_magn {
+	status = "okay";
+};
