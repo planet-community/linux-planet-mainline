@@ -25,3 +25,7 @@
 &mpss_mem {
 	size = <0x0 0x5000000>;
 };
+
+&panel {
+	compatible = "samsung,s6288a0";
+};
