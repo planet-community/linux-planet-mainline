@@ -24,6 +24,10 @@
 	vci-supply = <&pm8916_l17>;
 };
 
+&pm8916_codec {
+	qcom,micbias1-ext-cap;
+};
+
 &reg_vdd_lcd_1p8 {
 	status = "okay";
 	gpio = <&tlmm 16 GPIO_ACTIVE_HIGH>;
