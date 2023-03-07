@@ -1238,7 +1238,7 @@ static int pm8916_wcd_analog_spmi_probe(struct platform_device *pdev)
 	priv->mclk = devm_clk_get(dev, "mclk");
 	if (IS_ERR(priv->mclk)) {
 		dev_err(dev, "failed to get mclk\n");
-		return PTR_ERR(priv->mclk);
+		priv->mclk = NULL;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(supply_names); i++)
@@ -1251,10 +1251,12 @@ static int pm8916_wcd_analog_spmi_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = clk_prepare_enable(priv->mclk);
-	if (ret < 0) {
-		dev_err(dev, "failed to enable mclk %d\n", ret);
-		return ret;
+	if (priv->mclk) {
+		ret = clk_prepare_enable(priv->mclk);
+		if (ret < 0) {
+			dev_err(dev, "failed to enable mclk %d\n", ret);
+			return ret;
+		}
 	}
 
 	if (gpiod_count(dev, "jack") > 0) {
@@ -1318,7 +1320,8 @@ static int pm8916_wcd_analog_spmi_probe(struct platform_device *pdev)
 				      ARRAY_SIZE(pm8916_wcd_analog_dai));
 
 err_disable_clk:
-	clk_disable_unprepare(priv->mclk);
+	if (priv->mclk)
+		clk_disable_unprepare(priv->mclk);
 	return ret;
 }
 
@@ -1326,7 +1329,8 @@ static void pm8916_wcd_analog_spmi_remove(struct platform_device *pdev)
 {
 	struct pm8916_wcd_analog_priv *priv = dev_get_drvdata(&pdev->dev);
 
-	clk_disable_unprepare(priv->mclk);
+	if (priv->mclk)
+		clk_disable_unprepare(priv->mclk);
 }
 
 static const struct of_device_id pm8916_wcd_analog_spmi_match_table[] = {
