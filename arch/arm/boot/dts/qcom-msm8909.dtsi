@@ -9,6 +9,10 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/power/qcom-rpmpd.h>
 #include <dt-bindings/thermal/thermal.h>
+#include <dt-bindings/soc/qcom,apr.h>
+#include <dt-bindings/sound/qcom,q6afe.h>
+#include <dt-bindings/sound/qcom,q6asm.h>
+#include <dt-bindings/sound/qcom,q6voice.h>
 
 / {
 	#address-cells = <1>;
@@ -737,6 +741,25 @@
 				drive-strength = <6>;
 				bias-pull-up;
 			};
+
+			cdc-pdm-lines {
+				cdc_pdm_lines_act: pdm-lines-on {
+					pins = "gpio59", "gpio60", "gpio61",
+					       "gpio62", "gpio63", "gpio64";
+					function = "cdc_pdm0";
+
+					drive-strength = <8>;
+					bias-disable;
+				};
+				cdc_pdm_lines_sus: pdm-lines-off {
+					pins = "gpio59", "gpio60", "gpio61",
+					       "gpio62", "gpio63", "gpio64";
+					function = "cdc_pdm0";
+
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
 		};
 
 		gcc: clock-controller@1800000 {
@@ -854,7 +877,94 @@
 				qcom,remote-pid = <1>;
 
 				label = "hexagon";
+
+				apr: apr {
+					compatible = "qcom,apr-v2";
+					qcom,smd-channels = "apr_audio_svc";
+					qcom,apr-domain = <APR_DOMAIN_ADSP>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+					status = "disabled";
+
+					apr-service@3 {
+						reg = <APR_SVC_ADSP_CORE>;
+						compatible = "qcom,q6core";
+					};
+
+					q6afe: apr-service@4 {
+						compatible = "qcom,q6afe";
+						reg = <APR_SVC_AFE>;
+						q6afedai: dais {
+							compatible = "qcom,q6afe-dais";
+							#address-cells = <1>;
+							#size-cells = <0>;
+							#sound-dai-cells = <1>;
+						};
+						q6afecc: clock-controller {
+							compatible = "qcom,q6afe-clocks";
+							#clock-cells = <2>;
+						};
+					};
+
+					q6asm: apr-service@7 {
+						compatible = "qcom,q6asm";
+						reg = <APR_SVC_ASM>;
+						q6asmdai: dais {
+							compatible = "qcom,q6asm-dais";
+							#address-cells = <1>;
+							#size-cells = <0>;
+							#sound-dai-cells = <1>;
+						};
+					};
+
+					q6adm: apr-service@8 {
+						compatible = "qcom,q6adm";
+						reg = <APR_SVC_ADM>;
+						q6routing: routing {
+							compatible = "qcom,q6adm-routing";
+							#sound-dai-cells = <0>;
+						};
+					};
+
+					q6mvm: apr-service@9 {
+						compatible = "qcom,q6mvm";
+						reg = <APR_SVC_ADSP_MVM>;
+
+						q6voicedai: dais {
+							compatible = "qcom,q6voice-dais";
+							#sound-dai-cells = <1>;
+						};
+					};
+
+					q6cvs: apr-service@a {
+						compatible = "qcom,q6cvs";
+						reg = <APR_SVC_ADSP_CVS>;
+					};
+
+					q6cvp: apr-service@b {
+						compatible = "qcom,q6cvp";
+						reg = <APR_SVC_ADSP_CVP>;
+					};
+				};
 			};
+		};
+
+		sound: sound@7702000 {
+			status = "disabled";
+			compatible = "qcom,msm8916-qdsp6-sndcard";
+			reg = <0x07702000 0x4>, <0x07702004 0x4>;
+			reg-names = "mic-iomux", "spkr-iomux";
+		};
+
+		lpass_codec: audio-codec@771c000 {
+			compatible = "qcom,msm8916-wcd-digital-codec";
+			reg = <0x0771c000 0x400>;
+			clocks = <&xo_board>,
+				 <&q6afecc LPASS_CLK_ID_INTERNAL_DIGITAL_CODEC_CORE LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
+			clock-names = "ahbix-clk", "mclk";
+			assigned-clocks = <&q6afecc LPASS_CLK_ID_INTERNAL_DIGITAL_CODEC_CORE LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
+			assigned-clock-rates = <9600000>;
+			#sound-dai-cells = <1>;
 		};
 
 		sdhc_1: sdhci@7824000 {
