@@ -185,7 +185,7 @@ int mipi_dbi_poweron_conditional_reset(struct mipi_dbi_dev *dbidev);
 
 u32 mipi_dbi_spi_cmd_max_speed(struct spi_device *spi, size_t len);
 int mipi_dbi_spi_transfer(struct spi_device *spi, u32 speed_hz,
-			  u8 bpw, const void *buf, size_t len);
+			  u8 bpw, const void *buf, size_t len, bool is_locked);
 
 int mipi_dbi_command_read(struct mipi_dbi *dbi, u8 cmd, u8 *val);
 int mipi_dbi_command_buf(struct mipi_dbi *dbi, u8 cmd, u8 *data, size_t len);
