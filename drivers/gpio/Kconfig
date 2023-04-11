@@ -1690,6 +1690,16 @@ config GPIO_MOCKUP
 	  tools/testing/selftests/gpio/gpio-mockup.sh. Reference the usage in
 	  it.
 
+config GPIO_MUXED_SELECT
+	tristate "GPIO multiplexed select line driver"
+	help
+	  Say yes here to enable a virtual GPIO driver that acts as a binary
+	  encoder and is able to represent a multiplexed "enable" GPIO as
+	  separate "select" GPIOs.
+	  This is useful when drivers need to enable "select" GPIOs one at a
+	  time, e.g. SPI CS GPIOs, but hardware uses a single "enable" GPIO
+	  multiplexed using binary-encoded "select" GPIOs instead.
+
 config GPIO_VIRTIO
 	tristate "VirtIO GPIO support"
 	depends on VIRTIO
