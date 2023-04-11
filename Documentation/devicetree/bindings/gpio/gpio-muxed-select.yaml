@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/gpio/gpio-muxed-select.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: GPIO multiplexed select line
+
+maintainers:
+  - Otto Pflüger <otto.pflueger@abscue.de>
+
+description: |
+  This binding describes a simple binary encoder for accessing
+  separate GPIOs, of which only one may be enabled at a time, over a
+  single multiplexed line.
+  The number of GPIOs is equal to 2^N, where N is the number of
+  select-gpios specified in the device tree.
+
+properties:
+  compatible:
+    const: gpio-latch
+  "#gpio-cells":
+    const: 2
+
+  enable-gpios:
+    description: GPIO to be used to enable the selected line
+
+  select-gpios:
+    description: Array of GPIOs to be used to select the target line,
+      starting with bit 0 and followed by bits with increasing significance
+
+  input-active-low:
+    description: Whether the GPIOs provided by this binding are active-low
+
+  enable-duration-ns:
+    description: Delay in nanoseconds to wait between selecting a line
+      and enabling it
+
+  disable-duration-ns:
+    description: Delay in nanoseconds to wait between disabling the selected
+      line and selecting a new line
+
+  gpio-controller: true
+
+  gpio-line-names: true
+
+required:
+  - compatible
+  - "#gpio-cells"
+  - gpio-controller
+  - clk-gpios
+  - latched-gpios
+
+additionalProperties: false
+
+examples:
+  - |
+    spi_cs_gpios: gpio-cs-mux {
+        #gpio-cells = <2>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&spi_cs_pinctrl>;
+        compatible = "gpio-muxed-select";
+        gpio-controller;
+
+        select-gpios = <&pio 60 GPIO_ACTIVE_HIGH>, /* select bit 0 */
+                       <&pio 61 GPIO_ACTIVE_HIGH>; /* select bit 1 */
+        enable-gpios = <&pio 16 GPIO_ACTIVE_LOW>; /* chip select pin */
+        input-active-low;
+    };
