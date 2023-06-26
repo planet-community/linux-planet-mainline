@@ -141,7 +141,7 @@ static struct ieee80211_supported_band wcn_band_2ghz = {
 			IEEE80211_HT_CAP_LSIG_TXOP_PROT |
 			IEEE80211_HT_CAP_SGI_40 |
 			IEEE80211_HT_CAP_SUP_WIDTH_20_40,
-		.ht_supported = true,
+		.ht_supported = false,
 		.ampdu_factor = IEEE80211_HT_MAX_AMPDU_64K,
 		.ampdu_density = IEEE80211_HT_MPDU_DENSITY_16,
 		.mcs = {
