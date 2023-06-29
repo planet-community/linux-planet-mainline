@@ -12,6 +12,7 @@
 #include <dt-bindings/reset/qcom,gcc-msm8916.h>
 #include <dt-bindings/soc/qcom,apr.h>
 #include <dt-bindings/soc/qcom,memshare.h>
+#include <dt-bindings/sound/qcom,q6afe.h>
 #include <dt-bindings/thermal/thermal.h>
 
 / {
@@ -1525,6 +1526,10 @@
 					q6afe: apr-service@4 {
 						compatible = "qcom,q6afe";
 						reg = <APR_SVC_AFE>;
+						q6afecc: clock-controller {
+							compatible = "qcom,q6afe-clocks";
+							#clock-cells = <2>;
+						};
 						q6afedai: dais {
 							compatible = "qcom,q6afe-dais";
 							#address-cells = <1>;
@@ -1636,8 +1641,9 @@
 		lpass_codec: audio-codec@771c000 {
 			compatible = "qcom,msm8916-wcd-digital-codec";
 			reg = <0x0771c000 0x400>;
-			clocks = <&gcc GCC_ULTAUDIO_AHBFABRIC_IXFABRIC_CLK>,
-				 <&gcc GCC_CODEC_DIGCODEC_CLK>;
+			clocks = <&xo_board>,
+				 <&q6afecc LPASS_CLK_ID_INTERNAL_DIGITAL_CODEC_CORE
+					   LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
 			clock-names = "ahbix-clk", "mclk";
 			#sound-dai-cells = <1>;
 		};
