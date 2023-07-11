@@ -336,6 +336,7 @@
 
 &mpss_mem {
 	status = "okay";
+	size = <0x0 0x2b00000>;
 };
 
 &pm8916_codec {
