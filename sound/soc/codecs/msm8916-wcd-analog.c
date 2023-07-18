@@ -7,7 +7,6 @@
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
 #include <linux/types.h>
-#include <linux/clk.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -295,7 +294,6 @@ struct pm8916_wcd_analog_priv {
 	/* special event to detect accessory type */
 	int	mbhc_btn0_released;
 	bool	detect_accessory_type;
-	struct clk *mclk;
 	struct snd_soc_component *component;
 	struct regulator_bulk_data supplies[ARRAY_SIZE(supply_names)];
 	struct snd_soc_jack *jack;
@@ -1235,12 +1233,6 @@ static int pm8916_wcd_analog_spmi_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return ret;
 
-	priv->mclk = devm_clk_get(dev, "mclk");
-	if (IS_ERR(priv->mclk)) {
-		dev_err(dev, "failed to get mclk\n");
-		return PTR_ERR(priv->mclk);
-	}
-
 	for (i = 0; i < ARRAY_SIZE(supply_names); i++)
 		priv->supplies[i].supply = supply_names[i];
 
@@ -1248,12 +1240,6 @@ static int pm8916_wcd_analog_spmi_probe(struct platform_device *pdev)
 				    priv->supplies);
 	if (ret) {
 		dev_err(dev, "Failed to get regulator supplies %d\n", ret);
-		return ret;
-	}
-
-	ret = clk_prepare_enable(priv->mclk);
-	if (ret < 0) {
-		dev_err(dev, "failed to enable mclk %d\n", ret);
 		return ret;
 	}
 
@@ -1266,10 +1252,8 @@ static int pm8916_wcd_analog_spmi_probe(struct platform_device *pdev)
 		priv->jack_gpio.data = priv;
 	} else {
 		irq = platform_get_irq_byname(pdev, "mbhc_switch_int");
-		if (irq < 0) {
-			ret = irq;
-			goto err_disable_clk;
-		}
+		if (irq < 0)
+			return irq;
 
 		ret = devm_request_threaded_irq(dev, irq, NULL,
 				       pm8916_mbhc_switch_irq_handler,
@@ -1282,10 +1266,8 @@ static int pm8916_wcd_analog_spmi_probe(struct platform_device *pdev)
 
 	if (priv->mbhc_btn_enabled) {
 		irq = platform_get_irq_byname(pdev, "mbhc_but_press_det");
-		if (irq < 0) {
-			ret = irq;
-			goto err_disable_clk;
-		}
+		if (irq < 0)
+			return irq;
 
 		ret = devm_request_threaded_irq(dev, irq, NULL,
 				       mbhc_btn_press_irq_handler,
@@ -1296,10 +1278,8 @@ static int pm8916_wcd_analog_spmi_probe(struct platform_device *pdev)
 			dev_err(dev, "cannot request mbhc button press irq\n");
 
 		irq = platform_get_irq_byname(pdev, "mbhc_but_rel_det");
-		if (irq < 0) {
-			ret = irq;
-			goto err_disable_clk;
-		}
+		if (irq < 0)
+			return irq;
 
 		ret = devm_request_threaded_irq(dev, irq, NULL,
 				       mbhc_btn_release_irq_handler,
@@ -1316,17 +1296,6 @@ static int pm8916_wcd_analog_spmi_probe(struct platform_device *pdev)
 	return devm_snd_soc_register_component(dev, &pm8916_wcd_analog,
 				      pm8916_wcd_analog_dai,
 				      ARRAY_SIZE(pm8916_wcd_analog_dai));
-
-err_disable_clk:
-	clk_disable_unprepare(priv->mclk);
-	return ret;
-}
-
-static void pm8916_wcd_analog_spmi_remove(struct platform_device *pdev)
-{
-	struct pm8916_wcd_analog_priv *priv = dev_get_drvdata(&pdev->dev);
-
-	clk_disable_unprepare(priv->mclk);
 }
 
 static const struct of_device_id pm8916_wcd_analog_spmi_match_table[] = {
@@ -1342,7 +1311,6 @@ static struct platform_driver pm8916_wcd_analog_spmi_driver = {
 		   .of_match_table = pm8916_wcd_analog_spmi_match_table,
 	},
 	.probe = pm8916_wcd_analog_spmi_probe,
-	.remove_new = pm8916_wcd_analog_spmi_remove,
 };
 
 module_platform_driver(pm8916_wcd_analog_spmi_driver);
