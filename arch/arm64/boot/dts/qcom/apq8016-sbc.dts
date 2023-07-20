@@ -303,6 +303,10 @@
 	};
 };
 
+&gpu {
+	status = "okay";
+};
+
 &lpass {
 	status = "okay";
 };
