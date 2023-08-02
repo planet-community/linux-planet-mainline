@@ -51,6 +51,7 @@
 			next-level-cache = <&L2_0>;
 			enable-method = "qcom,msm8909-smp";
 			clocks = <&apcs>;
+			operating-points-v2 = <&cpu_opp_table>;
 			#cooling-cells = <2>;
 			cpu-idle-states = <&CPU_SLEEP_0>;
 			qcom,acc = <&cpu0_acc>;
@@ -64,6 +65,7 @@
 			next-level-cache = <&L2_0>;
 			enable-method = "qcom,msm8909-smp";
 			clocks = <&apcs>;
+			operating-points-v2 = <&cpu_opp_table>;
 			#cooling-cells = <2>;
 			cpu-idle-states = <&CPU_SLEEP_0>;
 			qcom,acc = <&cpu1_acc>;
@@ -77,6 +79,7 @@
 			next-level-cache = <&L2_0>;
 			enable-method = "qcom,msm8909-smp";
 			clocks = <&apcs>;
+			operating-points-v2 = <&cpu_opp_table>;
 			#cooling-cells = <2>;
 			cpu-idle-states = <&CPU_SLEEP_0>;
 			qcom,acc = <&cpu2_acc>;
@@ -90,6 +93,7 @@
 			next-level-cache = <&L2_0>;
 			enable-method = "qcom,msm8909-smp";
 			clocks = <&apcs>;
+			operating-points-v2 = <&cpu_opp_table>;
 			#cooling-cells = <2>;
 			cpu-idle-states = <&CPU_SLEEP_0>;
 			qcom,acc = <&cpu3_acc>;
@@ -110,6 +114,24 @@
 				min-residency-us = <1260>;
 				local-timer-stop;
 			};
+		};
+	};
+
+	cpu_opp_table: opp-table-cpu {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-200000000 {
+			opp-hz = /bits/ 64 <200000000>;
+		};
+		opp-400000000 {
+			opp-hz = /bits/ 64 <400000000>;
+		};
+		opp-800000000 {
+			opp-hz = /bits/ 64 <800000000>;
+		};
+		opp-998400000 {
+			opp-hz = /bits/ 64 <998400000>;
 		};
 	};
 
@@ -781,6 +803,172 @@
 		tcsr: syscon@1937000 {
 			compatible = "qcom,tcsr-msm8909", "syscon";
 			reg = <0x01937000 0x30000>;
+		};
+
+		camss: camss@1b00000 {
+			compatible = "qcom,msm8909-camss";
+			reg = <0x01b0ac00 0x200>,
+				<0x01b00030 0x4>,
+				<0x01b08000 0x100>,
+				<0x01b08400 0x100>,
+				<0x01b0a000 0x500>,
+				<0x01b00020 0x10>,
+				<0x01b10000 0x1000>;
+			reg-names = "csiphy0",
+				"csiphy0_clk_mux",
+				"csid0",
+				"csid1",
+				"ispif",
+				"csi_clk_mux",
+				"vfe0";
+			interrupts = <GIC_SPI 78 IRQ_TYPE_EDGE_RISING>,
+				<GIC_SPI 49 IRQ_TYPE_EDGE_RISING>,
+				<GIC_SPI 50 IRQ_TYPE_EDGE_RISING>,
+				<GIC_SPI 51 IRQ_TYPE_EDGE_RISING>,
+				<GIC_SPI 52 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "csiphy0",
+				"csid0",
+				"csid1",
+				"ispif",
+				"vfe0";
+			power-domains = <&gcc VFE_GDSC>;
+			clocks = <&gcc GCC_CAMSS_TOP_AHB_CLK>,
+				<&gcc GCC_CAMSS_ISPIF_AHB_CLK>,
+				<&gcc GCC_CAMSS_CSI0PHYTIMER_CLK>,
+				<&gcc GCC_CAMSS_CSI0_AHB_CLK>,
+				<&gcc GCC_CAMSS_CSI0_CLK>,
+				<&gcc GCC_CAMSS_CSI0PHY_CLK>,
+				<&gcc GCC_CAMSS_CSI0PIX_CLK>,
+				<&gcc GCC_CAMSS_CSI0RDI_CLK>,
+				<&gcc GCC_CAMSS_CSI1_AHB_CLK>,
+				<&gcc GCC_CAMSS_CSI1_CLK>,
+				<&gcc GCC_CAMSS_CSI1PHY_CLK>,
+				<&gcc GCC_CAMSS_CSI1PIX_CLK>,
+				<&gcc GCC_CAMSS_CSI1RDI_CLK>,
+				<&gcc GCC_CAMSS_AHB_CLK>,
+				<&gcc GCC_CAMSS_VFE0_CLK>,
+				<&gcc GCC_CAMSS_CSI_VFE0_CLK>,
+				<&gcc GCC_CAMSS_VFE_AHB_CLK>,
+				<&gcc GCC_CAMSS_VFE_AXI_CLK>;
+			clock-names = "top_ahb",
+				"ispif_ahb",
+				"csiphy0_timer",
+				"csi0_ahb",
+				"csi0",
+				"csi0_phy",
+				"csi0_pix",
+				"csi0_rdi",
+				"csi1_ahb",
+				"csi1",
+				"csi1_phy",
+				"csi1_pix",
+				"csi1_rdi",
+				"ahb",
+				"vfe0",
+				"csi_vfe0",
+				"vfe_ahb",
+				"vfe_axi";
+			iommus = <&apps_iommu 3>;
+			status = "disabled";
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
+		};
+
+		gpu@1c00000 {
+			compatible = "qcom,adreno-304.0", "qcom,adreno", "amd,imageon";
+			reg = <0x01c00000 0x20000>;
+			reg-names = "kgsl_3d0_reg_memory";
+			interrupts = <GIC_SPI 33 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "kgsl_3d0_irq";
+			clock-names =
+			    "core",
+			    "iface",
+			    "mem_iface",
+			    "alt_mem_iface",
+			    "gfx3d";
+			clocks =
+			    <&gcc GCC_OXILI_GFX3D_CLK>,
+			    <&gcc GCC_OXILI_AHB_CLK>,
+			    <&gcc GCC_BIMC_GFX_CLK>,
+			    <&gcc GCC_BIMC_GPU_CLK>,
+			    <&gcc GFX3D_CLK_SRC>;
+			power-domains = <&gcc OXILI_GDSC>;
+			operating-points-v2 = <&gpu_opp_table>;
+			iommus = <&gpu_iommu 1>, <&gpu_iommu 2>;
+
+			gpu_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-200000000 {
+					opp-hz = /bits/ 64 <200000000>;
+				};
+				opp-19200000 {
+					opp-hz = /bits/ 64 <19200000>;
+				};
+			};
+		};
+
+		apps_iommu: iommu@1ef0000 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			#iommu-cells = <1>;
+			compatible = "qcom,msm8916-iommu", "qcom,msm-iommu-v1";
+			ranges = <0 0x01e20000 0x40000>;
+			reg = <0x01ef0000 0x3000>;
+			clocks = <&gcc GCC_SMMU_CFG_CLK>,
+				 <&gcc GCC_APSS_TCU_CLK>;
+			clock-names = "iface", "bus";
+			power-domains = <&gcc VFE_GDSC>;
+			qcom,iommu-secure-id = <17>;
+
+			// vfe:
+			iommu-ctx@3000 {
+				compatible = "qcom,msm-iommu-v1-sec";
+				reg = <0x3000 0x1000>;
+				interrupts = <GIC_SPI 104 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			// mdp_0:
+			iommu-ctx@4000 {
+				compatible = "qcom,msm-iommu-v1-ns";
+				reg = <0x4000 0x1000>;
+				interrupts = <GIC_SPI 105 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			// venus_ns:
+			iommu-ctx@5000 {
+				compatible = "qcom,msm-iommu-v1-sec";
+				reg = <0x5000 0x1000>;
+				interrupts = <GIC_SPI 106 IRQ_TYPE_LEVEL_HIGH>;
+			};
+		};
+
+		gpu_iommu: iommu@1f08000 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			#iommu-cells = <1>;
+			compatible = "qcom,msm8916-iommu", "qcom,msm-iommu-v1";
+			ranges = <0 0x01f08000 0x10000>;
+			clocks = <&gcc GCC_SMMU_CFG_CLK>,
+				 <&gcc GCC_GFX_TCU_CLK>;
+			clock-names = "iface", "bus";
+			qcom,iommu-secure-id = <18>;
+
+			// gfx3d_user:
+			iommu-ctx@1000 {
+				compatible = "qcom,msm-iommu-v1-ns";
+				reg = <0x1000 0x1000>;
+				interrupts = <GIC_SPI 241 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			// gfx3d_priv:
+			iommu-ctx@2000 {
+				compatible = "qcom,msm-iommu-v1-ns";
+				reg = <0x2000 0x1000>;
+				interrupts = <GIC_SPI 242 IRQ_TYPE_LEVEL_HIGH>;
+			};
 		};
 
 		spmi_bus: spmi@200f000 {

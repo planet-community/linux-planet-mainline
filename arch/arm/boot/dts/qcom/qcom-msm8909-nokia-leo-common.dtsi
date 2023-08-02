@@ -126,6 +126,34 @@
 	status = "okay";
 };
 
+&blsp_i2c3 {
+	status = "okay";
+
+	camera-sensor@37 {
+		compatible = "galaxycore,gc2385";
+		reg = <0x37>;
+		avdd-supply = <&pm8909_l17>;
+		dovdd-supply = <&pm8909_l6>;
+		dvdd-supply = <&pm8909_l2>;
+
+		pwdn-gpios = <&tlmm 34 GPIO_ACTIVE_LOW>;
+		reset-gpios = <&tlmm 35 GPIO_ACTIVE_LOW>;
+
+		clocks = <&gcc GCC_CAMSS_MCLK0_CLK>;
+		clock-names = "xvclk";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&camera_rear_default>;
+
+		port {
+			gc2385_ep: endpoint {
+				data-lanes = <0>;
+				remote-endpoint = <&csiphy0_ep>;
+			};
+		};
+	};
+};
+
 &blsp_spi5 {
 	status = "okay";
 
@@ -161,6 +189,23 @@
 
 &blsp_uart1 {
 	status = "okay";
+};
+
+&camss {
+	status = "okay";
+
+	vdda-supply = <&pm8909_l2>;
+
+	ports {
+		port@0 {
+			reg = <0>;
+			csiphy0_ep: endpoint {
+				clock-lanes = <7>;
+				data-lanes = <0>;
+				remote-endpoint = <&gc2385_ep>;
+			};
+		};
+	};
 };
 
 &mpss {
@@ -496,5 +541,29 @@
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-down;
+	};
+
+	camera_rear_default: camera-rear-default-state {
+		pwdn-pins {
+			pins = "gpio34";
+			function = "gpio";
+
+			drive-strength = <2>;
+			bias-disable;
+		};
+		rst-pins {
+			pins = "gpio35";
+			function = "gpio";
+
+			drive-strength = <2>;
+			bias-disable;
+		};
+		mclk0-pins {
+			pins = "gpio26";
+			function = "cam_mclk";
+
+			drive-strength = <2>;
+			bias-disable;
+		};
 	};
 };
