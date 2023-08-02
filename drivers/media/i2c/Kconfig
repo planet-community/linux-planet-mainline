@@ -47,6 +47,18 @@ config VIDEO_AR0521
 	  To compile this driver as a module, choose M here: the
 	  module will be called ar0521.
 
+config VIDEO_GC2385
+	tristate "GalaxyCore GC2385 sensor support"
+	depends on VIDEO_DEV && I2C
+	select MEDIA_CONTROLLER
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the GalaxyCore
+	  GC2385 camera.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called gc2385.
+
 config VIDEO_HI556
 	tristate "Hynix Hi-556 sensor support"
 	depends on I2C && VIDEO_DEV
