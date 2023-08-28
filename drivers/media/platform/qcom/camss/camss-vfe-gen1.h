@@ -43,6 +43,7 @@ struct vfe_hw_ops_gen1 {
 	void (*set_rdi_cid)(struct vfe_device *vfe, enum vfe_line_id id, u8 cid);
 	void (*set_realign_cfg)(struct vfe_device *vfe, struct vfe_line *line, u8 enable);
 	void (*set_qos)(struct vfe_device *vfe);
+	void (*set_wb_cfg)(struct vfe_device *vfe, struct vfe_line *line);
 	void (*set_xbar_cfg)(struct vfe_device *vfe, struct vfe_output *output, u8 enable);
 	void (*wm_frame_based)(struct vfe_device *vfe, u8 wm, u8 enable);
 	void (*wm_line_based)(struct vfe_device *vfe, u32 wm, struct v4l2_pix_format_mplane *pix,
@@ -101,6 +102,14 @@ int vfe_gen1_enable(struct vfe_line *line);
  * Return 0 on success
  */
 int vfe_gen1_halt(struct vfe_device *vfe);
+
+/*
+ * vfe_gen1_update_cfg - Update VFE controls
+ * @line: VFE line
+ *
+ * Return 0 on success
+ */
+int vfe_gen1_update_cfg(struct vfe_line *line);
 
 /*
  * vfe_word_per_line - Calculate number of words per frame width

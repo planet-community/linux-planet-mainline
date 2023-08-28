@@ -13,6 +13,7 @@
 #include <linux/clk.h>
 #include <linux/spinlock_types.h>
 #include <media/media-entity.h>
+#include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-subdev.h>
 
@@ -94,8 +95,12 @@ struct vfe_line {
 	struct v4l2_rect crop;
 	struct camss_video video_out;
 	struct vfe_output output;
+	struct v4l2_ctrl_handler ctrls;
 	const struct vfe_format *formats;
 	unsigned int nformats;
+	struct v4l2_ctrl *r_balance;
+	struct v4l2_ctrl *b_balance;
+	struct v4l2_ctrl *dig_gain;
 };
 
 struct vfe_device;
@@ -115,6 +120,7 @@ struct vfe_hw_ops {
 	int (*vfe_disable)(struct vfe_line *line);
 	int (*vfe_enable)(struct vfe_line *line);
 	int (*vfe_halt)(struct vfe_device *vfe);
+	int (*vfe_update_cfg)(struct vfe_line *line);
 	void (*violation_read)(struct vfe_device *vfe);
 };
 

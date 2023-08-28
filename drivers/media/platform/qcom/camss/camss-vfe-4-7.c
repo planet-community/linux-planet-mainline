@@ -791,6 +791,11 @@ static void vfe_set_demux_cfg(struct vfe_device *vfe, struct vfe_line *line)
 	writel_relaxed(odd_cfg, vfe->base + VFE_0_DEMUX_ODD_CFG);
 }
 
+static void vfe_set_wb_cfg(struct vfe_device *vfe, struct vfe_line *line)
+{
+	/* not implemented yet */
+}
+
 static void vfe_set_scale_cfg(struct vfe_device *vfe, struct vfe_line *line)
 {
 	u32 p = line->video_out.active_fmt.fmt.pix_mp.pixelformat;
@@ -1170,6 +1175,7 @@ static const struct vfe_hw_ops_gen1 vfe_ops_gen1_4_7 = {
 	.set_rdi_cid = vfe_set_rdi_cid,
 	.set_realign_cfg = vfe_set_realign_cfg,
 	.set_scale_cfg = vfe_set_scale_cfg,
+	.set_wb_cfg = vfe_set_wb_cfg,
 	.set_xbar_cfg = vfe_set_xbar_cfg,
 	.wm_enable = vfe_wm_enable,
 	.wm_frame_based = vfe_wm_frame_based,
@@ -1205,5 +1211,6 @@ const struct vfe_hw_ops vfe_ops_4_7 = {
 	.vfe_disable = vfe_gen1_disable,
 	.vfe_enable = vfe_gen1_enable,
 	.vfe_halt = vfe_gen1_halt,
+	.vfe_update_cfg = vfe_gen1_update_cfg,
 	.violation_read = vfe_violation_read,
 };

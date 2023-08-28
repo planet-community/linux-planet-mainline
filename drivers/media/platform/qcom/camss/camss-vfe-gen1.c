@@ -264,6 +264,7 @@ static int vfe_enable_output(struct vfe_line *line)
 		vfe->ops_gen1->set_realign_cfg(vfe, line, 1);
 		vfe->ops_gen1->set_xbar_cfg(vfe, output, 1);
 		vfe->ops_gen1->set_demux_cfg(vfe, line);
+		vfe->ops_gen1->set_wb_cfg(vfe, line);
 		vfe->ops_gen1->set_scale_cfg(vfe, line);
 		vfe->ops_gen1->set_crop_cfg(vfe, line);
 		vfe->ops_gen1->set_clamp_cfg(vfe);
@@ -378,6 +379,15 @@ error_get_output:
 	mutex_unlock(&vfe->stream_lock);
 
 	return ret;
+}
+
+int vfe_gen1_update_cfg(struct vfe_line *line)
+{
+	struct vfe_device *vfe = to_vfe(line);
+
+	vfe->ops_gen1->set_wb_cfg(vfe, line);
+
+	return 0;
 }
 
 static void vfe_output_update_ping_addr(struct vfe_device *vfe,
