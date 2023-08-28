@@ -773,6 +773,12 @@ static void vfe_subdev_init(struct device *dev, struct vfe_device *vfe)
 	vfe->line_num = VFE_LINE_NUM_GEN2;
 }
 
+static int vfe_update_cfg(struct vfe_line *line)
+{
+	/* no runtime configuration */
+	return 0;
+}
+
 const struct vfe_hw_ops vfe_ops_170 = {
 	.global_reset = vfe_global_reset,
 	.hw_version = vfe_hw_version,
@@ -786,5 +792,6 @@ const struct vfe_hw_ops vfe_ops_170 = {
 	.vfe_disable = vfe_disable,
 	.vfe_enable = vfe_enable,
 	.vfe_halt = vfe_halt,
+	.vfe_update_cfg = vfe_update_cfg,
 	.violation_read = vfe_violation_read,
 };
