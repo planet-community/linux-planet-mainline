@@ -61,6 +61,10 @@ static const struct vfe_format formats_pix_8x16[] = {
 	{ MEDIA_BUS_FMT_VYUY8_2X8, 8 },
 	{ MEDIA_BUS_FMT_YUYV8_2X8, 8 },
 	{ MEDIA_BUS_FMT_YVYU8_2X8, 8 },
+	{ MEDIA_BUS_FMT_SBGGR10_1X10, 10 },
+	{ MEDIA_BUS_FMT_SGBRG10_1X10, 10 },
+	{ MEDIA_BUS_FMT_SGRBG10_1X10, 10 },
+	{ MEDIA_BUS_FMT_SRGGB10_1X10, 10 },
 };
 
 static const struct vfe_format formats_rdi_8x96[] = {
@@ -1478,6 +1482,63 @@ static const struct media_entity_operations vfe_media_ops = {
 	.link_validate = v4l2_subdev_link_validate,
 };
 
+static int vfe_s_ctrl(struct v4l2_ctrl *ctrl)
+{
+	struct vfe_line *line = container_of(ctrl->handler, struct vfe_line, ctrls);
+	struct vfe_device *vfe = to_vfe(line);
+
+	if (vfe->stream_count > 0)
+		vfe->ops->vfe_update_cfg(line);
+
+	return 0;
+}
+
+static const struct v4l2_ctrl_ops vfe_ctrl_ops = {
+	.s_ctrl = vfe_s_ctrl,
+};
+
+/*
+ * vfe_init_ctrls - Initialize V4L2 controls on pix line
+ * @sd: VFE V4L2 subdevice
+ * @l: VFE pix line
+ *
+ * Allocate ISP-related V4L2 controls and initialize them with
+ * default values.
+ *
+ * Return 0 on success or a negative error code otherwise
+ */
+static int vfe_init_ctrls(struct v4l2_subdev *sd, struct vfe_line *l)
+{
+	int ret;
+
+	ret = v4l2_ctrl_handler_init(&l->ctrls, 3);
+	if (ret < 0)
+		return ret;
+
+	l->r_balance = v4l2_ctrl_new_std(&l->ctrls,
+				&vfe_ctrl_ops, V4L2_CID_RED_BALANCE,
+				0, 255, 1, 128);
+	l->b_balance = v4l2_ctrl_new_std(&l->ctrls,
+				&vfe_ctrl_ops, V4L2_CID_BLUE_BALANCE,
+				0, 255, 1, 128);
+	l->dig_gain = v4l2_ctrl_new_std(&l->ctrls,
+				&vfe_ctrl_ops, V4L2_CID_DIGITAL_GAIN,
+				0, 255, 1, 128);
+	if (l->ctrls.error) {
+		ret = l->ctrls.error;
+		goto free_ctrls;
+	}
+
+	sd->ctrl_handler = &l->ctrls;
+
+	return 0;
+
+free_ctrls:
+	v4l2_ctrl_handler_free(&l->ctrls);
+
+	return ret;
+}
+
 /*
  * msm_vfe_register_entities - Register subdev node for VFE module
  * @vfe: VFE device
@@ -1518,6 +1579,14 @@ int msm_vfe_register_entities(struct vfe_device *vfe,
 				 MSM_VFE_NAME, vfe->id, "rdi", i);
 
 		v4l2_set_subdevdata(sd, &vfe->line[i]);
+
+		if (i == VFE_LINE_PIX) {
+			ret = vfe_init_ctrls(sd, &vfe->line[i]);
+			if (ret < 0) {
+				dev_err(dev, "Failed to init controls: %d\n", ret);
+				goto error_init;
+			}
+		}
 
 		ret = vfe_init_formats(sd, NULL);
 		if (ret < 0) {
@@ -1595,6 +1664,8 @@ error_init:
 		msm_video_unregister(video_out);
 		v4l2_device_unregister_subdev(sd);
 		media_entity_cleanup(&sd->entity);
+		if (i == VFE_LINE_PIX)
+			v4l2_ctrl_handler_free(sd->ctrl_handler);
 	}
 
 	return ret;
@@ -1618,5 +1689,7 @@ void msm_vfe_unregister_entities(struct vfe_device *vfe)
 		msm_video_unregister(video_out);
 		v4l2_device_unregister_subdev(sd);
 		media_entity_cleanup(&sd->entity);
+		if (i == VFE_LINE_PIX)
+			v4l2_ctrl_handler_free(sd->ctrl_handler);
 	}
 }

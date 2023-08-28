@@ -32,10 +32,17 @@
 #define VFE_0_MODULE_CFG		0x018
 #define VFE_0_MODULE_CFG_DEMUX			BIT(2)
 #define VFE_0_MODULE_CFG_CHROMA_UPSAMPLE	BIT(3)
+#define VFE_0_MODULE_CFG_DEMOSAIC		BIT(4)
+#define VFE_0_MODULE_CFG_WB			BIT(11)
+#define VFE_0_MODULE_CFG_CHROMA_ENHANCEMENT	BIT(17)
 #define VFE_0_MODULE_CFG_SCALE_ENC		BIT(23)
 #define VFE_0_MODULE_CFG_CROP_ENC		BIT(27)
 
 #define VFE_0_CORE_CFG			0x01c
+#define VFE_0_CORE_CFG_PIXEL_PATTERN_RGGB	0x0
+#define VFE_0_CORE_CFG_PIXEL_PATTERN_GRBG	0x1
+#define VFE_0_CORE_CFG_PIXEL_PATTERN_BGGR	0x2
+#define VFE_0_CORE_CFG_PIXEL_PATTERN_GBRG	0x3
 #define VFE_0_CORE_CFG_PIXEL_PATTERN_YCBYCR	0x4
 #define VFE_0_CORE_CFG_PIXEL_PATTERN_YCRYCB	0x5
 #define VFE_0_CORE_CFG_PIXEL_PATTERN_CBYCRY	0x6
@@ -158,7 +165,8 @@
 			((n) == VFE_LINE_PIX ? 1 : VFE_0_REG_UPDATE_RDIn(n))
 
 #define VFE_0_DEMUX_CFG				0x424
-#define VFE_0_DEMUX_CFG_PERIOD			0x3
+#define VFE_0_DEMUX_CFG_PERIOD_YUV		0x3
+#define VFE_0_DEMUX_CFG_PERIOD_BAYER		0x1
 #define VFE_0_DEMUX_GAIN_0			0x428
 #define VFE_0_DEMUX_GAIN_0_CH0_EVEN		(0x80 << 0)
 #define VFE_0_DEMUX_GAIN_0_CH0_ODD		(0x80 << 16)
@@ -170,11 +178,32 @@
 #define VFE_0_DEMUX_EVEN_CFG_PATTERN_YVYU	0xac9c
 #define VFE_0_DEMUX_EVEN_CFG_PATTERN_UYVY	0xc9ca
 #define VFE_0_DEMUX_EVEN_CFG_PATTERN_VYUY	0xcac9
+#define VFE_0_DEMUX_EVEN_CFG_PATTERN_GRBG	0x9c
+#define VFE_0_DEMUX_EVEN_CFG_PATTERN_GBRG	0xac
+#define VFE_0_DEMUX_EVEN_CFG_PATTERN_RGGB	0xc9
+#define VFE_0_DEMUX_EVEN_CFG_PATTERN_BGGR	0xca
 #define VFE_0_DEMUX_ODD_CFG			0x43c
 #define VFE_0_DEMUX_ODD_CFG_PATTERN_YUYV	0x9cac
 #define VFE_0_DEMUX_ODD_CFG_PATTERN_YVYU	0xac9c
 #define VFE_0_DEMUX_ODD_CFG_PATTERN_UYVY	0xc9ca
 #define VFE_0_DEMUX_ODD_CFG_PATTERN_VYUY	0xcac9
+#define VFE_0_DEMUX_ODD_CFG_PATTERN_BGGR	0x9c
+#define VFE_0_DEMUX_ODD_CFG_PATTERN_RGGB	0xac
+#define VFE_0_DEMUX_ODD_CFG_PATTERN_GBRG	0xc9
+#define VFE_0_DEMUX_ODD_CFG_PATTERN_GRBG	0xca
+
+#define VFE_0_WB_CFG				0x580
+#define VFE_0_WB_CFG_GAIN(r, g, b)		((g) | ((b) << 9) | ((r) << 18))
+
+#define VFE_0_CHROMA_ENHANCEMENT_Y_COEFF_R	0x640
+#define VFE_0_CHROMA_ENHANCEMENT_Y_COEFF_G	0x644
+#define VFE_0_CHROMA_ENHANCEMENT_Y_COEFF_B	0x648
+#define VFE_0_CHROMA_ENHANCEMENT_Y_OFFSET	0x64c
+#define VFE_0_CHROMA_ENHANCEMENT_A		0x650
+#define VFE_0_CHROMA_ENHANCEMENT_B		0x654
+#define VFE_0_CHROMA_ENHANCEMENT_C		0x658
+#define VFE_0_CHROMA_ENHANCEMENT_D		0x65c
+#define VFE_0_CHROMA_ENHANCEMENT_CBCR_OFFSET	0x660
 
 #define VFE_0_SCALE_ENC_Y_CFG			0x75c
 #define VFE_0_SCALE_ENC_Y_H_IMAGE_SIZE		0x760
@@ -603,9 +632,7 @@ static void vfe_enable_irq_common(struct vfe_device *vfe)
 
 static void vfe_set_demux_cfg(struct vfe_device *vfe, struct vfe_line *line)
 {
-	u32 val, even_cfg, odd_cfg;
-
-	writel_relaxed(VFE_0_DEMUX_CFG_PERIOD, vfe->base + VFE_0_DEMUX_CFG);
+	u32 val, period, even_cfg, odd_cfg;
 
 	val = VFE_0_DEMUX_GAIN_0_CH0_EVEN | VFE_0_DEMUX_GAIN_0_CH0_ODD;
 	writel_relaxed(val, vfe->base + VFE_0_DEMUX_GAIN_0);
@@ -615,26 +642,61 @@ static void vfe_set_demux_cfg(struct vfe_device *vfe, struct vfe_line *line)
 
 	switch (line->fmt[MSM_VFE_PAD_SINK].code) {
 	case MEDIA_BUS_FMT_YUYV8_2X8:
+		period = VFE_0_DEMUX_CFG_PERIOD_YUV;
 		even_cfg = VFE_0_DEMUX_EVEN_CFG_PATTERN_YUYV;
 		odd_cfg = VFE_0_DEMUX_ODD_CFG_PATTERN_YUYV;
 		break;
 	case MEDIA_BUS_FMT_YVYU8_2X8:
+		period = VFE_0_DEMUX_CFG_PERIOD_YUV;
 		even_cfg = VFE_0_DEMUX_EVEN_CFG_PATTERN_YVYU;
 		odd_cfg = VFE_0_DEMUX_ODD_CFG_PATTERN_YVYU;
 		break;
 	case MEDIA_BUS_FMT_UYVY8_2X8:
 	default:
+		period = VFE_0_DEMUX_CFG_PERIOD_YUV;
 		even_cfg = VFE_0_DEMUX_EVEN_CFG_PATTERN_UYVY;
 		odd_cfg = VFE_0_DEMUX_ODD_CFG_PATTERN_UYVY;
 		break;
 	case MEDIA_BUS_FMT_VYUY8_2X8:
+		period = VFE_0_DEMUX_CFG_PERIOD_YUV;
 		even_cfg = VFE_0_DEMUX_EVEN_CFG_PATTERN_VYUY;
 		odd_cfg = VFE_0_DEMUX_ODD_CFG_PATTERN_VYUY;
 		break;
+	case MEDIA_BUS_FMT_SBGGR10_1X10:
+		period = VFE_0_DEMUX_CFG_PERIOD_BAYER;
+		even_cfg = VFE_0_DEMUX_EVEN_CFG_PATTERN_BGGR;
+		odd_cfg = VFE_0_DEMUX_ODD_CFG_PATTERN_BGGR;
+		break;
+	case MEDIA_BUS_FMT_SGBRG10_1X10:
+		period = VFE_0_DEMUX_CFG_PERIOD_BAYER;
+		even_cfg = VFE_0_DEMUX_EVEN_CFG_PATTERN_GBRG;
+		odd_cfg = VFE_0_DEMUX_ODD_CFG_PATTERN_GBRG;
+		break;
+	case MEDIA_BUS_FMT_SGRBG10_1X10:
+		period = VFE_0_DEMUX_CFG_PERIOD_BAYER;
+		even_cfg = VFE_0_DEMUX_EVEN_CFG_PATTERN_GRBG;
+		odd_cfg = VFE_0_DEMUX_ODD_CFG_PATTERN_GRBG;
+		break;
+	case MEDIA_BUS_FMT_SRGGB10_1X10:
+		period = VFE_0_DEMUX_CFG_PERIOD_BAYER;
+		even_cfg = VFE_0_DEMUX_EVEN_CFG_PATTERN_RGGB;
+		odd_cfg = VFE_0_DEMUX_ODD_CFG_PATTERN_RGGB;
+		break;
 	}
 
+	writel_relaxed(period, vfe->base + VFE_0_DEMUX_CFG);
 	writel_relaxed(even_cfg, vfe->base + VFE_0_DEMUX_EVEN_CFG);
 	writel_relaxed(odd_cfg, vfe->base + VFE_0_DEMUX_ODD_CFG);
+}
+
+static void vfe_set_wb_cfg(struct vfe_device *vfe, struct vfe_line *line)
+{
+	u16 r, g = line->dig_gain->val, b;
+
+	r = g * line->r_balance->val / 128;
+	b = g * line->b_balance->val / 128;
+
+	writel_relaxed(VFE_0_WB_CFG_GAIN(r, g, b), vfe->base + VFE_0_WB_CFG);
 }
 
 static void vfe_set_scale_cfg(struct vfe_device *vfe, struct vfe_line *line)
@@ -788,6 +850,18 @@ static void vfe_set_camif_cfg(struct vfe_device *vfe, struct vfe_line *line)
 	case MEDIA_BUS_FMT_VYUY8_2X8:
 		val = VFE_0_CORE_CFG_PIXEL_PATTERN_CRYCBY;
 		break;
+	case MEDIA_BUS_FMT_SRGGB10_1X10:
+		val = VFE_0_CORE_CFG_PIXEL_PATTERN_RGGB;
+		break;
+	case MEDIA_BUS_FMT_SGRBG10_1X10:
+		val = VFE_0_CORE_CFG_PIXEL_PATTERN_GRBG;
+		break;
+	case MEDIA_BUS_FMT_SBGGR10_1X10:
+		val = VFE_0_CORE_CFG_PIXEL_PATTERN_BGGR;
+		break;
+	case MEDIA_BUS_FMT_SGBRG10_1X10:
+		val = VFE_0_CORE_CFG_PIXEL_PATTERN_GBRG;
+		break;
 	}
 
 	writel_relaxed(val, vfe->base + VFE_0_CORE_CFG);
@@ -831,12 +905,51 @@ static void vfe_set_camif_cmd(struct vfe_device *vfe, u8 enable)
 	writel_relaxed(cmd, vfe->base + VFE_0_CAMIF_CMD);
 }
 
+static void vfe_set_demosaic_cfg(struct vfe_device *vfe)
+{
+	/*
+	 * Set the default RGB to Y conversion constants:
+	 *   Y = R * 0.299 + G * 0.587 + B * 0.114
+	 * These are stored as Q8 fixed-point values.
+	 */
+	writel_relaxed(77, vfe->base + VFE_0_CHROMA_ENHANCEMENT_Y_COEFF_R);
+	writel_relaxed(150, vfe->base + VFE_0_CHROMA_ENHANCEMENT_Y_COEFF_G);
+	writel_relaxed(29, vfe->base + VFE_0_CHROMA_ENHANCEMENT_Y_COEFF_B);
+	writel_relaxed(0, vfe->base + VFE_0_CHROMA_ENHANCEMENT_Y_OFFSET);
+
+	/*
+	 * Set the default RGB to UV conversion constants. See
+	 * Qualcomm's "Advanced chroma enhancement" patent for more
+	 * information.
+	 */
+	writel_relaxed(0x00800080, vfe->base + VFE_0_CHROMA_ENHANCEMENT_A);
+	writel_relaxed(0x0faa0faa, vfe->base + VFE_0_CHROMA_ENHANCEMENT_B);
+	writel_relaxed(0x00800080, vfe->base + VFE_0_CHROMA_ENHANCEMENT_C);
+	writel_relaxed(0x0fd60fd6, vfe->base + VFE_0_CHROMA_ENHANCEMENT_D);
+	writel_relaxed(0x00800080, vfe->base + VFE_0_CHROMA_ENHANCEMENT_CBCR_OFFSET);
+}
+
 static void vfe_set_module_cfg(struct vfe_device *vfe, u8 enable)
 {
 	u32 val = VFE_0_MODULE_CFG_DEMUX |
-		  VFE_0_MODULE_CFG_CHROMA_UPSAMPLE |
 		  VFE_0_MODULE_CFG_SCALE_ENC |
 		  VFE_0_MODULE_CFG_CROP_ENC;
+
+	switch (vfe->line[VFE_LINE_PIX].fmt[MSM_VFE_PAD_SINK].code) {
+	case MEDIA_BUS_FMT_SBGGR10_1X10:
+	case MEDIA_BUS_FMT_SGBRG10_1X10:
+	case MEDIA_BUS_FMT_SGRBG10_1X10:
+	case MEDIA_BUS_FMT_SRGGB10_1X10:
+		val |= VFE_0_MODULE_CFG_DEMOSAIC |
+		       VFE_0_MODULE_CFG_WB |
+		       VFE_0_MODULE_CFG_CHROMA_ENHANCEMENT;
+		if (enable)
+			vfe_set_demosaic_cfg(vfe);
+		break;
+	default:
+		val |= VFE_0_MODULE_CFG_CHROMA_UPSAMPLE;
+		break;
+	}
 
 	if (enable)
 		writel_relaxed(val, vfe->base + VFE_0_MODULE_CFG);
@@ -998,6 +1111,7 @@ static const struct vfe_hw_ops_gen1 vfe_ops_gen1_4_1 = {
 	.set_rdi_cid = vfe_set_rdi_cid,
 	.set_realign_cfg = vfe_set_realign_cfg,
 	.set_scale_cfg = vfe_set_scale_cfg,
+	.set_wb_cfg = vfe_set_wb_cfg,
 	.set_xbar_cfg = vfe_set_xbar_cfg,
 	.wm_enable = vfe_wm_enable,
 	.wm_frame_based = vfe_wm_frame_based,
@@ -1033,5 +1147,6 @@ const struct vfe_hw_ops vfe_ops_4_1 = {
 	.vfe_disable = vfe_gen1_disable,
 	.vfe_enable = vfe_gen1_enable,
 	.vfe_halt = vfe_gen1_halt,
+	.vfe_update_cfg = vfe_gen1_update_cfg,
 	.violation_read = vfe_violation_read,
 };
