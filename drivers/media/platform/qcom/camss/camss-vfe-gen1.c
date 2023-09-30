@@ -77,6 +77,13 @@ static int vfe_disable_output(struct vfe_line *line)
 			vfe->ops_gen1->set_cgc_override(vfe, output->wm_idx[i], 0);
 		}
 
+		for (i = 0; i < MSM_VFE_STATS_NUM_MAX; i++) {
+			if (vfe->stats_outputs[i].type == CAMSS_STATS_TYPE_MAX)
+				continue;
+			vfe->ops_gen1->stats_set_cgc_override(vfe, i, 0);
+			vfe->ops_gen1->enable_irq_stats(vfe, i, 0);
+		}
+
 		vfe->ops_gen1->enable_irq_pix_line(vfe, 0, line->id, 0);
 		vfe->ops_gen1->set_module_cfg(vfe, 0);
 		vfe->ops_gen1->set_realign_cfg(vfe, line, 0);
@@ -165,6 +172,82 @@ static void vfe_output_frame_drop(struct vfe_device *vfe,
 	vfe->ops->reg_update(vfe, container_of(output, struct vfe_line, output)->id);
 }
 
+static void vfe_stats_init_addrs(struct vfe_device *vfe,
+				 struct vfe_stats_output *output)
+{
+	u32 ping_addr;
+	u32 pong_addr;
+
+	output->active_buf = 0;
+
+	if (output->buf[0])
+		ping_addr = output->buf[0]->addr;
+	else
+		ping_addr = 0;
+
+	if (output->buf[1])
+		pong_addr = output->buf[1]->addr;
+	else
+		pong_addr = ping_addr;
+
+	vfe->ops_gen1->stats_set_ping_addr(vfe, output->idx, ping_addr);
+	vfe->ops_gen1->stats_set_pong_addr(vfe, output->idx, pong_addr);
+}
+
+static void vfe_stats_frame_drop(struct vfe_device *vfe,
+				 struct vfe_stats_output *output,
+				 u32 drop_pattern)
+{
+	u8 drop_period;
+
+	/* We need to toggle update period to be valid on next frame */
+	output->drop_update_idx++;
+	output->drop_update_idx %= VFE_FRAME_DROP_UPDATES;
+	drop_period = VFE_FRAME_DROP_VAL + output->drop_update_idx;
+
+	vfe->ops_gen1->stats_set_framedrop_period(vfe, output->idx, drop_period);
+	vfe->ops_gen1->stats_set_framedrop_pattern(vfe, output->idx, drop_pattern);
+
+	vfe->ops->reg_update(vfe, VFE_LINE_PIX);
+}
+
+static void vfe_stats_init(struct vfe_device *vfe,
+			   struct vfe_stats_output *output,
+			   unsigned int single_framedrop,
+			   unsigned int continuous_framedrop)
+{
+	output->state = VFE_OUTPUT_IDLE;
+
+	if (!output->buf[0] && output->buf[1]) {
+		output->buf[0] = output->buf[1];
+		output->buf[1] = NULL;
+	}
+
+	if (output->buf[0]) {
+		msm_stats_assign_buf_type(output->buf[0], output->type);
+		output->state = VFE_OUTPUT_SINGLE;
+	}
+
+	if (output->buf[1]) {
+		msm_stats_assign_buf_type(output->buf[1], output->type);
+		output->state = VFE_OUTPUT_CONTINUOUS;
+	}
+
+	switch (output->state) {
+	case VFE_OUTPUT_SINGLE:
+		vfe_stats_frame_drop(vfe, output, single_framedrop);
+		break;
+	case VFE_OUTPUT_CONTINUOUS:
+		vfe_stats_frame_drop(vfe, output, continuous_framedrop);
+		break;
+	default:
+		vfe_stats_frame_drop(vfe, output, 0);
+		break;
+	}
+
+	vfe_stats_init_addrs(vfe, output);
+}
+
 static int vfe_enable_output(struct vfe_line *line)
 {
 	struct vfe_device *vfe = to_vfe(line);
@@ -175,10 +258,13 @@ static int vfe_enable_output(struct vfe_line *line)
 	unsigned int frame_skip = 0;
 	unsigned int i;
 	u16 ub_size;
+	u16 stats_ub_offset;
 
 	ub_size = vfe->ops_gen1->get_ub_size(vfe->id);
 	if (!ub_size)
 		return -EINVAL;
+
+	stats_ub_offset = ub_size;
 
 	sensor = camss_find_sensor(&line->subdev.entity);
 	if (sensor) {
@@ -247,6 +333,21 @@ static int vfe_enable_output(struct vfe_line *line)
 		vfe->ops_gen1->wm_enable(vfe, output->wm_idx[0], 1);
 		vfe->ops_gen1->bus_reload_wm(vfe, output->wm_idx[0]);
 	} else {
+		for (i = 0; i < MSM_VFE_STATS_NUM_MAX; i++) {
+			vfe->stats_outputs[i].type = vfe->ops_gen1->stats_get_type(i);
+			if (vfe->stats_outputs[i].type == CAMSS_STATS_TYPE_MAX)
+				continue;
+			vfe->stats_outputs[i].buf[0] = vfe_stats_buf_get_pending(vfe);
+		}
+
+		for (i = 0; i < MSM_VFE_STATS_NUM_MAX; i++) {
+			if (vfe->stats_outputs[i].type == CAMSS_STATS_TYPE_MAX)
+				continue;
+			vfe->stats_outputs[i].buf[1] = vfe_stats_buf_get_pending(vfe);
+			vfe_stats_init(vfe, &vfe->stats_outputs[i],
+				       1 << frame_skip, 3 << frame_skip);
+		}
+
 		ub_size /= output->wm_num;
 		for (i = 0; i < output->wm_num; i++) {
 			vfe->ops_gen1->set_cgc_override(vfe, output->wm_idx[i], 1);
@@ -258,7 +359,16 @@ static int vfe_enable_output(struct vfe_line *line)
 			vfe->ops_gen1->wm_enable(vfe, output->wm_idx[i], 1);
 			vfe->ops_gen1->bus_reload_wm(vfe, output->wm_idx[i]);
 		}
+		for (i = 0; i < MSM_VFE_STATS_NUM_MAX; i++) {
+			if (vfe->stats_outputs[i].type == CAMSS_STATS_TYPE_MAX)
+				continue;
+			vfe->ops_gen1->stats_set_cgc_override(vfe, i, 1);
+			vfe->ops_gen1->stats_set_subsample(vfe, i);
+			stats_ub_offset = vfe->ops_gen1->stats_set_ub_cfg(vfe, i, stats_ub_offset);
+			vfe->ops_gen1->enable_irq_stats(vfe, i, 1);
+		}
 		vfe->ops_gen1->enable_irq_pix_line(vfe, 0, line->id, 1);
+		vfe->ops_gen1->set_stats_cfg(vfe);
 		vfe->ops_gen1->set_module_cfg(vfe, 1);
 		vfe->ops_gen1->set_camif_cfg(vfe, line);
 		vfe->ops_gen1->set_realign_cfg(vfe, line, 1);
@@ -543,6 +653,17 @@ static void vfe_isr_sof(struct vfe_device *vfe, enum vfe_line_id line_id)
 	spin_unlock_irqrestore(&vfe->output_lock, flags);
 }
 
+static void vfe_stats_release_buffer(struct vfe_device *vfe,
+				     struct vfe_stats_output *output)
+{
+	if (output->last_buffer) {
+		vb2_buffer_done(&output->last_buffer->vb.vb2_buf,
+				VB2_BUF_STATE_DONE);
+		output->last_buffer = NULL;
+	}
+	output->state = VFE_OUTPUT_IDLE;
+}
+
 /*
  * vfe_isr_reg_update - Process reg update interrupt
  * @vfe: VFE Device
@@ -553,6 +674,7 @@ static void vfe_isr_reg_update(struct vfe_device *vfe, enum vfe_line_id line_id)
 	struct vfe_output *output;
 	struct vfe_line *line = &vfe->line[line_id];
 	unsigned long flags;
+	unsigned int i;
 
 	spin_lock_irqsave(&vfe->output_lock, flags);
 	vfe->ops->reg_update_clear(vfe, line_id);
@@ -605,6 +727,26 @@ static void vfe_isr_reg_update(struct vfe_device *vfe, enum vfe_line_id line_id)
 		}
 
 		vfe_output_init_addrs(vfe, output, 1, &vfe->line[line_id]);
+	}
+
+	for (i = 0; i < MSM_VFE_STATS_NUM_MAX; i++) {
+		if (vfe->stats_outputs[i].type == CAMSS_STATS_TYPE_MAX)
+			continue;
+
+		if (vfe->stats_outputs[i].state == VFE_OUTPUT_STOPPING) {
+			vfe_stats_release_buffer(vfe, &vfe->stats_outputs[i]);
+			vfe->stats_outputs[i].buf[0] = vfe_stats_buf_get_pending(vfe);
+		}
+	}
+
+	for (i = 0; i < MSM_VFE_STATS_NUM_MAX; i++) {
+		if (vfe->stats_outputs[i].type == CAMSS_STATS_TYPE_MAX)
+			continue;
+
+		if (vfe->stats_outputs[i].state == VFE_OUTPUT_STOPPING) {
+			vfe->stats_outputs[i].buf[1] = vfe_stats_buf_get_pending(vfe);
+			vfe_stats_init(vfe, &vfe->stats_outputs[i], 2, 3);
+		}
 	}
 
 	spin_unlock_irqrestore(&vfe->output_lock, flags);
@@ -713,6 +855,237 @@ static int vfe_queue_buffer(struct camss_video *vid, struct camss_buffer *buf)
 	return 0;
 }
 
+static void vfe_stats_update_ping_addr(struct vfe_device *vfe,
+				       struct vfe_stats_output *output)
+{
+	u32 addr;
+
+	if (output->buf[0])
+		addr = output->buf[0]->addr;
+	else
+		addr = 0;
+
+	vfe->ops_gen1->stats_set_ping_addr(vfe, output->idx, addr);
+}
+
+static void vfe_stats_update_pong_addr(struct vfe_device *vfe,
+				       struct vfe_stats_output *output)
+{
+	u32 addr;
+
+	if (output->buf[1])
+		addr = output->buf[1]->addr;
+	else
+		addr = 0;
+
+	vfe->ops_gen1->stats_set_pong_addr(vfe, output->idx, addr);
+}
+
+static struct vfe_stats_output *vfe_stats_find_next_output(struct vfe_device *vfe)
+{
+	unsigned int i;
+
+	for (i = 0; i < MSM_VFE_STATS_NUM_MAX; i++) {
+		if (vfe->stats_outputs[i].type == CAMSS_STATS_TYPE_MAX)
+			continue;
+		if (vfe->stats_outputs[i].state == VFE_OUTPUT_IDLE)
+			return &vfe->stats_outputs[i];
+	}
+
+	for (i = 0; i < MSM_VFE_STATS_NUM_MAX; i++) {
+		if (vfe->stats_outputs[i].type == CAMSS_STATS_TYPE_MAX)
+			continue;
+		if (vfe->stats_outputs[i].state == VFE_OUTPUT_SINGLE)
+			return &vfe->stats_outputs[i];
+	}
+
+	return NULL;
+}
+
+static void vfe_stats_update_wm_on_next(struct vfe_device *vfe,
+					struct vfe_stats_output *output)
+{
+	switch (output->state) {
+	case VFE_OUTPUT_CONTINUOUS:
+		vfe_stats_frame_drop(vfe, output, 3);
+		break;
+	case VFE_OUTPUT_SINGLE:
+	default:
+		dev_err_ratelimited(vfe->camss->dev,
+				    "Next stats buf in wrong state! %d\n",
+				    output->state);
+		break;
+	}
+}
+
+static void vfe_stats_update_wm_on_last(struct vfe_device *vfe,
+					struct vfe_stats_output *output)
+{
+	switch (output->state) {
+	case VFE_OUTPUT_CONTINUOUS:
+		output->state = VFE_OUTPUT_SINGLE;
+		vfe_stats_frame_drop(vfe, output, 1);
+		break;
+	case VFE_OUTPUT_SINGLE:
+		output->state = VFE_OUTPUT_STOPPING;
+		vfe_stats_frame_drop(vfe, output, 0);
+		break;
+	default:
+		dev_err_ratelimited(vfe->camss->dev,
+				    "Last stats buff in wrong state! %d\n",
+				    output->state);
+		break;
+	}
+}
+
+static void vfe_stats_update_wm_on_new(struct vfe_device *vfe,
+				       struct camss_stats_buffer *new_buf)
+{
+	struct vfe_stats_output *output = vfe_stats_find_next_output(vfe);
+	int inactive_idx;
+
+	if (!output) {
+		vfe_stats_buf_add_pending(vfe, new_buf);
+		return;
+	}
+
+	switch (output->state) {
+	case VFE_OUTPUT_SINGLE:
+		inactive_idx = !output->active_buf;
+
+		if (!output->buf[inactive_idx]) {
+			output->buf[inactive_idx] = new_buf;
+
+			if (inactive_idx)
+				vfe_stats_update_pong_addr(vfe, output);
+			else
+				vfe_stats_update_ping_addr(vfe, output);
+
+			vfe_stats_frame_drop(vfe, output, 3);
+			output->state = VFE_OUTPUT_CONTINUOUS;
+		} else {
+			vfe_stats_buf_add_pending(vfe, new_buf);
+			dev_err_ratelimited(vfe->camss->dev,
+					    "Inactive buffer is busy\n");
+		}
+		break;
+
+	case VFE_OUTPUT_IDLE:
+		if (!output->buf[0]) {
+			output->buf[0] = new_buf;
+
+			msm_stats_assign_buf_type(output->buf[0], output->type);
+			vfe_stats_init_addrs(vfe, output);
+			vfe_stats_frame_drop(vfe, output, 1);
+
+			output->state = VFE_OUTPUT_SINGLE;
+		} else {
+			vfe_stats_buf_add_pending(vfe, new_buf);
+			dev_err_ratelimited(vfe->camss->dev,
+					    "Output idle with buffer set!\n");
+		}
+		break;
+
+	default:
+		WARN_ON(1);
+		break;
+	}
+}
+
+/*
+ * vfe_isr_stats_done - Process write master done interrupt
+ * @vfe: VFE Device
+ * @idx: Stats index
+ */
+static void vfe_isr_stats_done(struct vfe_device *vfe, u8 idx)
+{
+	struct camss_stats_buffer *ready_buf;
+	struct vfe_stats_output *output;
+	dma_addr_t new_addr;
+	unsigned long flags;
+	u32 active_index;
+	u64 ts = ktime_get_ns();
+
+	active_index = vfe->ops_gen1->stats_get_ping_pong_status(vfe, idx);
+
+	spin_lock_irqsave(&vfe->output_lock, flags);
+
+	output = &vfe->stats_outputs[idx];
+
+	if (output->active_buf == active_index) {
+		dev_err_ratelimited(vfe->camss->dev,
+				    "Active stats buffer mismatch!\n");
+		goto out_unlock;
+	}
+	output->active_buf = active_index;
+
+	ready_buf = output->buf[!active_index];
+	if (!ready_buf) {
+		dev_err_ratelimited(vfe->camss->dev,
+				    "Missing ready stats buf %d %d!\n",
+				    !active_index, output->state);
+		goto out_unlock;
+	}
+
+	ready_buf->vb.vb2_buf.timestamp = ts;
+	ready_buf->vb.sequence = output->sequence++;
+
+	/* Get next buffer */
+	output->buf[!active_index] = vfe_stats_buf_get_pending(vfe);
+	if (!output->buf[!active_index]) {
+		/* No next buffer - set same address */
+		new_addr = ready_buf->addr;
+		vfe_stats_update_wm_on_last(vfe, output);
+	} else {
+		msm_stats_assign_buf_type(output->buf[!active_index], output->type);
+		new_addr = output->buf[!active_index]->addr;
+		vfe_stats_update_wm_on_next(vfe, output);
+	}
+
+	if (active_index)
+		vfe->ops_gen1->stats_set_ping_addr(vfe, output->idx, new_addr);
+	else
+		vfe->ops_gen1->stats_set_pong_addr(vfe, output->idx, new_addr);
+
+	spin_unlock_irqrestore(&vfe->output_lock, flags);
+
+	if (output->state == VFE_OUTPUT_STOPPING)
+		output->last_buffer = ready_buf;
+	else
+		vb2_buffer_done(&ready_buf->vb.vb2_buf, VB2_BUF_STATE_DONE);
+
+	return;
+
+out_unlock:
+	spin_unlock_irqrestore(&vfe->output_lock, flags);
+}
+
+/*
+ * vfe_queue_stats_buffer - Add empty stats buffer
+ * @stats: Stats device structure
+ * @buf: Buffer to be enqueued
+ *
+ * Add an empty stats buffer - depending on the current number of buffers it
+ * will be put in pending buffer queue or directly given to the hardware to be
+ * filled.
+ *
+ * Return 0 on success or a negative error code otherwise
+ */
+static int vfe_queue_stats_buffer(struct camss_stats *stats,
+				  struct camss_stats_buffer *buf)
+{
+	struct vfe_device *vfe = container_of(stats, struct vfe_device, stats);
+	unsigned long flags;
+
+	spin_lock_irqsave(&vfe->output_lock, flags);
+
+	vfe_stats_update_wm_on_new(vfe, buf);
+
+	spin_unlock_irqrestore(&vfe->output_lock, flags);
+
+	return 0;
+}
+
 #define CALC_WORD(width, M, N) (((width) * (M) + (N) - 1) / (N))
 
 int vfe_word_per_line(u32 format, u32 width)
@@ -744,9 +1117,15 @@ const struct vfe_isr_ops vfe_isr_ops_gen1 = {
 	.sof = vfe_isr_sof,
 	.comp_done = vfe_isr_comp_done,
 	.wm_done = vfe_isr_wm_done,
+	.stats_done = vfe_isr_stats_done,
 };
 
 const struct camss_video_ops vfe_video_ops_gen1 = {
 	.queue_buffer = vfe_queue_buffer,
 	.flush_buffers = vfe_flush_buffers,
+};
+
+const struct camss_stats_ops vfe_stats_ops_gen1 = {
+	.queue_buffer = vfe_queue_stats_buffer,
+	.flush_buffers = vfe_flush_stats_buffers,
 };

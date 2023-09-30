@@ -16,7 +16,9 @@
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-subdev.h>
+#include <uapi/linux/qcom-camss.h>
 
+#include "camss-stats.h"
 #include "camss-video.h"
 #include "camss-vfe-gen1.h"
 
@@ -26,6 +28,7 @@
 
 #define MSM_VFE_IMAGE_MASTERS_NUM 7
 #define MSM_VFE_COMPOSITE_IRQ_NUM 4
+#define MSM_VFE_STATS_NUM_MAX 1
 
 /* VFE halt timeout */
 #define VFE_HALT_TIMEOUT_MS 100
@@ -86,6 +89,20 @@ struct vfe_output {
 	struct completion reg_update;
 };
 
+struct vfe_stats_output {
+	u8 idx;
+	enum camss_stats_type type;
+
+	struct camss_stats_buffer *buf[2];
+	struct camss_stats_buffer *last_buffer;
+
+	unsigned int drop_update_idx;
+
+	int active_buf;
+	enum vfe_output_state state;
+	unsigned int sequence;
+};
+
 struct vfe_line {
 	enum vfe_line_id id;
 	struct v4l2_subdev subdev;
@@ -131,6 +148,7 @@ struct vfe_isr_ops {
 	void (*sof)(struct vfe_device *vfe, enum vfe_line_id line_id);
 	void (*comp_done)(struct vfe_device *vfe, u8 comp);
 	void (*wm_done)(struct vfe_device *vfe, u8 wm);
+	void (*stats_done)(struct vfe_device *vfe, u8 idx);
 };
 
 struct vfe_device {
@@ -157,6 +175,10 @@ struct vfe_device {
 	const struct vfe_hw_ops_gen1 *ops_gen1;
 	struct vfe_isr_ops isr_ops;
 	struct camss_video_ops video_ops;
+	struct camss_stats_ops stats_ops;
+	struct camss_stats stats;
+	struct vfe_stats_output stats_outputs[MSM_VFE_STATS_NUM_MAX];
+	struct list_head pending_stats_bufs;
 };
 
 struct resources;
@@ -178,7 +200,18 @@ void vfe_buf_add_pending(struct vfe_output *output, struct camss_buffer *buffer)
 
 struct camss_buffer *vfe_buf_get_pending(struct vfe_output *output);
 
+/*
+ * vfe_stats_buf_add_pending - Add stats buffer to list of pending
+ * @vfe: VFE device
+ * @buffer: Stats buffer
+ */
+void vfe_stats_buf_add_pending(struct vfe_device *vfe, struct camss_stats_buffer *buffer);
+
+struct camss_stats_buffer *vfe_stats_buf_get_pending(struct vfe_device *vfe);
+
 int vfe_flush_buffers(struct camss_video *vid, enum vb2_buffer_state state);
+
+int vfe_flush_stats_buffers(struct camss_stats *stats, enum vb2_buffer_state state);
 
 /*
  * vfe_isr_comp_done - Process composite image done interrupt

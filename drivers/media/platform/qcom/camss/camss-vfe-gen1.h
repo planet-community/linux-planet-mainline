@@ -28,6 +28,7 @@ struct vfe_hw_ops_gen1 {
 				   u8 enable);
 	void (*enable_irq_pix_line)(struct vfe_device *vfe, u8 comp, enum vfe_line_id line_id,
 				    u8 enable);
+	void (*enable_irq_stats)(struct vfe_device *vfe, u8 idx, u8 enable);
 	u16 (*get_ub_size)(u8 vfe_id);
 	void (*halt_clear)(struct vfe_device *vfe);
 	void (*halt_request)(struct vfe_device *vfe);
@@ -40,11 +41,21 @@ struct vfe_hw_ops_gen1 {
 	void (*set_ds)(struct vfe_device *vfe);
 	void (*set_module_cfg)(struct vfe_device *vfe, u8 enable);
 	void (*set_scale_cfg)(struct vfe_device *vfe, struct vfe_line *line);
+	void (*set_stats_cfg)(struct vfe_device *vfe);
 	void (*set_rdi_cid)(struct vfe_device *vfe, enum vfe_line_id id, u8 cid);
 	void (*set_realign_cfg)(struct vfe_device *vfe, struct vfe_line *line, u8 enable);
 	void (*set_qos)(struct vfe_device *vfe);
 	void (*set_wb_cfg)(struct vfe_device *vfe, struct vfe_line *line);
 	void (*set_xbar_cfg)(struct vfe_device *vfe, struct vfe_output *output, u8 enable);
+	void (*stats_set_cgc_override)(struct vfe_device *vfe, u8 idx, u8 enable);
+	u16 (*stats_set_ub_cfg)(struct vfe_device *vfe, u8 idx, u16 offset);
+	void (*stats_set_subsample)(struct vfe_device *vfe, u8 idx);
+	void (*stats_set_framedrop_period)(struct vfe_device *vfe, u8 idx, u8 per);
+	void (*stats_set_framedrop_pattern)(struct vfe_device *vfe, u8 idx, u32 pattern);
+	void (*stats_set_ping_addr)(struct vfe_device *vfe, u8 idx, u32 addr);
+	void (*stats_set_pong_addr)(struct vfe_device *vfe, u8 idx, u32 addr);
+	int (*stats_get_ping_pong_status)(struct vfe_device *vfe, u8 idx);
+	enum camss_stats_type (*stats_get_type)(u8 idx);
 	void (*wm_frame_based)(struct vfe_device *vfe, u8 wm, u8 enable);
 	void (*wm_line_based)(struct vfe_device *vfe, u32 wm, struct v4l2_pix_format_mplane *pix,
 			      u8 plane, u32 enable);
@@ -122,5 +133,6 @@ int vfe_word_per_line(u32 format, u32 width);
 
 extern const struct vfe_isr_ops vfe_isr_ops_gen1;
 extern const struct camss_video_ops vfe_video_ops_gen1;
+extern const struct camss_stats_ops vfe_stats_ops_gen1;
 
 #endif /* QC_MSM_CAMSS_VFE_GEN1_H */

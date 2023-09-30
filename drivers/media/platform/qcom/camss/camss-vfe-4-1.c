@@ -33,6 +33,7 @@
 #define VFE_0_MODULE_CFG_DEMUX			BIT(2)
 #define VFE_0_MODULE_CFG_CHROMA_UPSAMPLE	BIT(3)
 #define VFE_0_MODULE_CFG_DEMOSAIC		BIT(4)
+#define VFE_0_MODULE_CFG_STATS_BE		BIT(5)
 #define VFE_0_MODULE_CFG_WB			BIT(11)
 #define VFE_0_MODULE_CFG_CHROMA_ENHANCEMENT	BIT(17)
 #define VFE_0_MODULE_CFG_SCALE_ENC		BIT(23)
@@ -58,6 +59,7 @@
 #define VFE_0_IRQ_MASK_0_line_n_REG_UPDATE(n)		\
 	((n) == VFE_LINE_PIX ? BIT(4) : VFE_0_IRQ_MASK_0_RDIn_REG_UPDATE(n))
 #define VFE_0_IRQ_MASK_0_IMAGE_MASTER_n_PING_PONG(n)	BIT((n) + 8)
+#define VFE_0_IRQ_MASK_0_STATS_n_PING_PONG(n)		BIT((n) + 16)
 #define VFE_0_IRQ_MASK_0_IMAGE_COMPOSITE_DONE_n(n)	BIT((n) + 25)
 #define VFE_0_IRQ_MASK_0_RESET_ACK			BIT(31)
 #define VFE_0_IRQ_MASK_1		0x02c
@@ -65,6 +67,7 @@
 #define VFE_0_IRQ_MASK_1_VIOLATION			BIT(7)
 #define VFE_0_IRQ_MASK_1_BUS_BDG_HALT_ACK		BIT(8)
 #define VFE_0_IRQ_MASK_1_IMAGE_MASTER_n_BUS_OVERFLOW(n)	BIT((n) + 9)
+#define VFE_0_IRQ_MASK_1_STATS_n_BUS_OVERFLOW(n)	BIT((n) + 16)
 #define VFE_0_IRQ_MASK_1_RDIn_SOF(n)			BIT((n) + 29)
 
 #define VFE_0_IRQ_CLEAR_0		0x030
@@ -76,6 +79,7 @@
 #define VFE_0_IRQ_STATUS_0_line_n_REG_UPDATE(n)		\
 	((n) == VFE_LINE_PIX ? BIT(4) : VFE_0_IRQ_STATUS_0_RDIn_REG_UPDATE(n))
 #define VFE_0_IRQ_STATUS_0_IMAGE_MASTER_n_PING_PONG(n)	BIT((n) + 8)
+#define VFE_0_IRQ_STATUS_0_STATS_n_PING_PONG(n)		BIT((n) + 16)
 #define VFE_0_IRQ_STATUS_0_IMAGE_COMPOSITE_DONE_n(n)	BIT((n) + 25)
 #define VFE_0_IRQ_STATUS_0_RESET_ACK			BIT(31)
 #define VFE_0_IRQ_STATUS_1		0x03c
@@ -118,6 +122,17 @@
 #define VFE_0_BUS_IMAGE_MASTER_n_WR_IRQ_SUBSAMPLE_PATTERN(n)	\
 							(0x08c + 0x24 * (n))
 #define VFE_0_BUS_IMAGE_MASTER_n_WR_IRQ_SUBSAMPLE_PATTERN_DEF	0xffffffff
+
+#define VFE_0_STATS_n_WR_PING_ADDR(n)			(0x168 + 0x18 * (n))
+#define VFE_0_STATS_n_WR_PONG_ADDR(n)			(0x16c + 0x18 * (n))
+#define VFE_0_STATS_n_WR_ADDR_CFG(n)			(0x170 + 0x18 * (n))
+#define VFE_0_STATS_n_WR_ADDR_CFG_FRM_DROP_PER_SHIFT	2
+#define VFE_0_STATS_n_WR_ADDR_CFG_FRM_DROP_PER_MASK	(0x1f << 2)
+#define VFE_0_STATS_n_WR_UB_CFG(n)			(0x174 + 0x18 * (n))
+#define VFE_0_STATS_n_WR_UB_CFG_OFFSET_SHIFT		16
+#define VFE_0_STATS_n_WR_FRAMEDROP_PATTERN(n)		(0x178 + 0x18 * (n))
+#define VFE_0_STATS_n_WR_IRQ_SUBSAMPLE_PATTERN(n)	(0x17c + 0x18 * (n))
+#define VFE_0_STATS_n_WR_IRQ_SUBSAMPLE_PATTERN_DEF	0xffffffff
 
 #define VFE_0_BUS_PING_PONG_STATUS	0x268
 
@@ -230,14 +245,34 @@
 #define VFE_0_CLAMP_ENC_MIN_CFG_CH1		(0x0 << 8)
 #define VFE_0_CLAMP_ENC_MIN_CFG_CH2		(0x0 << 16)
 
+#define VFE_0_STATS_BE_RGN_OFFSET_CFG		0x88c
+#define VFE_0_STATS_BE_RGN_SIZE_CFG		0x890
+#define VFE_0_STATS_BE_RGN_SIZE_CFG_WIDTH(w)	(((w) - 1) << 0)
+#define VFE_0_STATS_BE_RGN_SIZE_CFG_HEIGHT(h)	(((h) - 1) << 9)
+#define VFE_0_STATS_BE_RGN_SIZE_CFG_HNUM(n)	(((n) - 1) << 18)
+#define VFE_0_STATS_BE_RGN_SIZE_CFG_VNUM(n)	(((n) - 1) << 24)
+#define VFE_0_STATS_BE_THRESHOLD_CFG		0x894
+#define VFE_0_STATS_BE_THRESHOLD_CFG_DEF	0xffffffff
+
 #define VFE_0_CGC_OVERRIDE_1			0x974
 #define VFE_0_CGC_OVERRIDE_1_IMAGE_Mx_CGC_OVERRIDE(x)	BIT(x)
+#define VFE_0_CGC_OVERRIDE_1_STATS_x_CGC_OVERRIDE(x)	BIT(8 + x)
 
 #define CAMIF_TIMEOUT_SLEEP_US 1000
 #define CAMIF_TIMEOUT_ALL_US 1000000
 
 #define MSM_VFE_VFE0_UB_SIZE 1023
 #define MSM_VFE_VFE0_UB_SIZE_RDI (MSM_VFE_VFE0_UB_SIZE / 3)
+
+#define MSM_VFE_STATS_NUM 1 /* only BE is currently supported */
+
+static const enum camss_stats_type stats_type_map[MSM_VFE_STATS_NUM] = {
+	CAMSS_STATS_TYPE_BAYER_EXPOSURE,
+};
+
+static const u16 stats_ub_size_map[MSM_VFE_STATS_NUM] = {
+	64,
+};
 
 static u32 vfe_hw_version(struct vfe_device *vfe)
 {
@@ -425,6 +460,68 @@ static int vfe_wm_get_ping_pong_status(struct vfe_device *vfe, u8 wm)
 	return (reg >> wm) & 0x1;
 }
 
+static enum camss_stats_type vfe_stats_get_type(u8 idx)
+{
+	if (idx >= MSM_VFE_STATS_NUM)
+		return CAMSS_STATS_TYPE_MAX;
+
+	return stats_type_map[idx];
+}
+
+static void vfe_stats_set_framedrop_period(struct vfe_device *vfe,
+					   u8 idx, u8 per)
+{
+	u32 reg;
+
+	reg = readl_relaxed(vfe->base + VFE_0_STATS_n_WR_ADDR_CFG(idx));
+
+	reg &= ~(VFE_0_STATS_n_WR_ADDR_CFG_FRM_DROP_PER_MASK);
+
+	reg |= (per << VFE_0_STATS_n_WR_ADDR_CFG_FRM_DROP_PER_SHIFT)
+		& VFE_0_STATS_n_WR_ADDR_CFG_FRM_DROP_PER_MASK;
+
+	writel_relaxed(reg, vfe->base + VFE_0_STATS_n_WR_ADDR_CFG(idx));
+}
+
+static void vfe_stats_set_framedrop_pattern(struct vfe_device *vfe,
+					    u8 idx, u32 pattern)
+{
+	writel_relaxed(pattern,
+	       vfe->base + VFE_0_STATS_n_WR_FRAMEDROP_PATTERN(idx));
+}
+
+static u16 vfe_stats_set_ub_cfg(struct vfe_device *vfe, u8 idx, u16 offset)
+{
+	u16 depth = stats_ub_size_map[idx];
+	u32 reg;
+
+	reg = (offset << VFE_0_STATS_n_WR_UB_CFG_OFFSET_SHIFT) | (depth - 1);
+	writel_relaxed(reg, vfe->base + VFE_0_STATS_n_WR_UB_CFG(idx));
+
+	return offset + depth;
+}
+
+static void vfe_stats_set_ping_addr(struct vfe_device *vfe, u8 idx, u32 addr)
+{
+	writel_relaxed(addr,
+		       vfe->base + VFE_0_STATS_n_WR_PING_ADDR(idx));
+}
+
+static void vfe_stats_set_pong_addr(struct vfe_device *vfe, u8 idx, u32 addr)
+{
+	writel_relaxed(addr,
+		       vfe->base + VFE_0_STATS_n_WR_PONG_ADDR(idx));
+}
+
+static int vfe_stats_get_ping_pong_status(struct vfe_device *vfe, u8 idx)
+{
+	u32 reg;
+
+	reg = readl_relaxed(vfe->base + VFE_0_BUS_PING_PONG_STATUS);
+
+	return (reg >> (8 + idx)) & 0x1;
+}
+
 static void vfe_bus_enable_wr_if(struct vfe_device *vfe, u8 enable)
 {
 	if (enable)
@@ -474,6 +571,12 @@ static void vfe_wm_set_subsample(struct vfe_device *vfe, u8 wm)
 	writel_relaxed(VFE_0_BUS_IMAGE_MASTER_n_WR_IRQ_SUBSAMPLE_PATTERN_DEF,
 		       vfe->base +
 		       VFE_0_BUS_IMAGE_MASTER_n_WR_IRQ_SUBSAMPLE_PATTERN(wm));
+}
+
+static void vfe_stats_set_subsample(struct vfe_device *vfe, u8 idx)
+{
+	writel_relaxed(VFE_0_STATS_n_WR_IRQ_SUBSAMPLE_PATTERN_DEF,
+		       vfe->base + VFE_0_STATS_n_WR_IRQ_SUBSAMPLE_PATTERN(idx));
 }
 
 static void vfe_bus_disconnect_wm_from_rdi(struct vfe_device *vfe, u8 wm,
@@ -579,6 +682,20 @@ static void vfe_enable_irq_wm_line(struct vfe_device *vfe, u8 wm,
 		      VFE_0_IRQ_MASK_0_line_n_REG_UPDATE(line_id);
 	u32 irq_en1 = VFE_0_IRQ_MASK_1_IMAGE_MASTER_n_BUS_OVERFLOW(wm) |
 		      VFE_0_IRQ_MASK_1_RDIn_SOF(line_id);
+
+	if (enable) {
+		vfe_reg_set(vfe, VFE_0_IRQ_MASK_0, irq_en0);
+		vfe_reg_set(vfe, VFE_0_IRQ_MASK_1, irq_en1);
+	} else {
+		vfe_reg_clr(vfe, VFE_0_IRQ_MASK_0, irq_en0);
+		vfe_reg_clr(vfe, VFE_0_IRQ_MASK_1, irq_en1);
+	}
+}
+
+static void vfe_enable_irq_stats(struct vfe_device *vfe, u8 idx, u8 enable)
+{
+	u32 irq_en0 = VFE_0_IRQ_MASK_0_STATS_n_PING_PONG(idx);
+	u32 irq_en1 = VFE_0_IRQ_MASK_1_STATS_n_BUS_OVERFLOW(idx);
 
 	if (enable) {
 		vfe_reg_set(vfe, VFE_0_IRQ_MASK_0, irq_en0);
@@ -697,6 +814,29 @@ static void vfe_set_wb_cfg(struct vfe_device *vfe, struct vfe_line *line)
 	b = g * line->b_balance->val / 128;
 
 	writel_relaxed(VFE_0_WB_CFG_GAIN(r, g, b), vfe->base + VFE_0_WB_CFG);
+}
+
+static void vfe_set_stats_cfg(struct vfe_device *vfe)
+{
+	u8 hnum = 32, vnum = 24;
+	u16 width, height;
+	u32 val = 0;
+
+	writel_relaxed(val, vfe->base + VFE_0_STATS_BE_RGN_OFFSET_CFG);
+
+	width = vfe->line[VFE_LINE_PIX].fmt[MSM_VFE_PAD_SINK].width / hnum;
+	height = vfe->line[VFE_LINE_PIX].fmt[MSM_VFE_PAD_SINK].height / vnum;
+
+	val = VFE_0_STATS_BE_RGN_SIZE_CFG_WIDTH(width) |
+		VFE_0_STATS_BE_RGN_SIZE_CFG_HEIGHT(height) |
+		VFE_0_STATS_BE_RGN_SIZE_CFG_HNUM(hnum) |
+		VFE_0_STATS_BE_RGN_SIZE_CFG_VNUM(vnum);
+
+	writel_relaxed(val, vfe->base + VFE_0_STATS_BE_RGN_SIZE_CFG);
+
+	val = 0xffffffff;
+
+	writel_relaxed(val, vfe->base + VFE_0_STATS_BE_THRESHOLD_CFG);
 }
 
 static void vfe_set_scale_cfg(struct vfe_device *vfe, struct vfe_line *line)
@@ -832,6 +972,18 @@ static void vfe_set_cgc_override(struct vfe_device *vfe, u8 wm, u8 enable)
 	wmb();
 }
 
+static void vfe_stats_set_cgc_override(struct vfe_device *vfe, u8 idx, u8 enable)
+{
+	u32 val = VFE_0_CGC_OVERRIDE_1_STATS_x_CGC_OVERRIDE(idx);
+
+	if (enable)
+		vfe_reg_set(vfe, VFE_0_CGC_OVERRIDE_1, val);
+	else
+		vfe_reg_clr(vfe, VFE_0_CGC_OVERRIDE_1, val);
+
+	wmb();
+}
+
 static void vfe_set_camif_cfg(struct vfe_device *vfe, struct vfe_line *line)
 {
 	u32 val;
@@ -941,6 +1093,7 @@ static void vfe_set_module_cfg(struct vfe_device *vfe, u8 enable)
 	case MEDIA_BUS_FMT_SGRBG10_1X10:
 	case MEDIA_BUS_FMT_SRGGB10_1X10:
 		val |= VFE_0_MODULE_CFG_DEMOSAIC |
+		       VFE_0_MODULE_CFG_STATS_BE |
 		       VFE_0_MODULE_CFG_WB |
 		       VFE_0_MODULE_CFG_CHROMA_ENHANCEMENT;
 		if (enable)
@@ -1042,6 +1195,10 @@ static irqreturn_t vfe_isr(int irq, void *dev)
 		if (value0 & VFE_0_IRQ_STATUS_0_IMAGE_MASTER_n_PING_PONG(i))
 			vfe->isr_ops.wm_done(vfe, i);
 
+	for (i = 0; i < MSM_VFE_STATS_NUM; i++)
+		if (value0 & VFE_0_IRQ_STATUS_0_STATS_n_PING_PONG(i))
+			vfe->isr_ops.stats_done(vfe, i);
+
 	return IRQ_HANDLED;
 }
 
@@ -1095,6 +1252,7 @@ static const struct vfe_hw_ops_gen1 vfe_ops_gen1_4_1 = {
 	.camif_wait_for_stop = vfe_camif_wait_for_stop,
 	.enable_irq_common = vfe_enable_irq_common,
 	.enable_irq_pix_line = vfe_enable_irq_pix_line,
+	.enable_irq_stats = vfe_enable_irq_stats,
 	.enable_irq_wm_line = vfe_enable_irq_wm_line,
 	.get_ub_size = vfe_get_ub_size,
 	.halt_clear = vfe_halt_clear,
@@ -1111,8 +1269,18 @@ static const struct vfe_hw_ops_gen1 vfe_ops_gen1_4_1 = {
 	.set_rdi_cid = vfe_set_rdi_cid,
 	.set_realign_cfg = vfe_set_realign_cfg,
 	.set_scale_cfg = vfe_set_scale_cfg,
+	.set_stats_cfg = vfe_set_stats_cfg,
 	.set_wb_cfg = vfe_set_wb_cfg,
 	.set_xbar_cfg = vfe_set_xbar_cfg,
+	.stats_get_ping_pong_status = vfe_stats_get_ping_pong_status,
+	.stats_get_type = vfe_stats_get_type,
+	.stats_set_cgc_override = vfe_stats_set_cgc_override,
+	.stats_set_framedrop_pattern = vfe_stats_set_framedrop_pattern,
+	.stats_set_framedrop_period = vfe_stats_set_framedrop_period,
+	.stats_set_ping_addr = vfe_stats_set_ping_addr,
+	.stats_set_pong_addr = vfe_stats_set_pong_addr,
+	.stats_set_subsample = vfe_stats_set_subsample,
+	.stats_set_ub_cfg = vfe_stats_set_ub_cfg,
 	.wm_enable = vfe_wm_enable,
 	.wm_frame_based = vfe_wm_frame_based,
 	.wm_get_ping_pong_status = vfe_wm_get_ping_pong_status,
@@ -1130,6 +1298,7 @@ static void vfe_subdev_init(struct device *dev, struct vfe_device *vfe)
 	vfe->isr_ops = vfe_isr_ops_gen1;
 	vfe->ops_gen1 = &vfe_ops_gen1_4_1;
 	vfe->video_ops = vfe_video_ops_gen1;
+	vfe->stats_ops = vfe_stats_ops_gen1;
 
 	vfe->line_num = VFE_LINE_NUM_GEN1;
 }

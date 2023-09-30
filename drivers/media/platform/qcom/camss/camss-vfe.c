@@ -320,6 +320,17 @@ static void vfe_init_outputs(struct vfe_device *vfe)
 		output->buf[1] = NULL;
 		INIT_LIST_HEAD(&output->pending_bufs);
 	}
+
+	for (i = 0; i < CAMSS_STATS_TYPE_MAX; i++) {
+		struct vfe_stats_output *output = &vfe->stats_outputs[i];
+
+		output->idx = i;
+		output->state = VFE_OUTPUT_OFF;
+		output->buf[0] = NULL;
+		output->buf[1] = NULL;
+	}
+
+	INIT_LIST_HEAD(&vfe->pending_stats_bufs);
 }
 
 static void vfe_reset_output_maps(struct vfe_device *vfe)
@@ -375,6 +386,27 @@ void vfe_buf_add_pending(struct vfe_output *output,
 {
 	INIT_LIST_HEAD(&buffer->queue);
 	list_add_tail(&buffer->queue, &output->pending_bufs);
+}
+
+struct camss_stats_buffer *vfe_stats_buf_get_pending(struct vfe_device *vfe)
+{
+	struct camss_stats_buffer *buffer = NULL;
+
+	if (!list_empty(&vfe->pending_stats_bufs)) {
+		buffer = list_first_entry(&vfe->pending_stats_bufs,
+					  struct camss_stats_buffer,
+					  queue);
+		list_del(&buffer->queue);
+	}
+
+	return buffer;
+}
+
+void vfe_stats_buf_add_pending(struct vfe_device *vfe,
+			       struct camss_stats_buffer *buffer)
+{
+	INIT_LIST_HEAD(&buffer->queue);
+	list_add_tail(&buffer->queue, &vfe->pending_stats_bufs);
 }
 
 /*
@@ -698,6 +730,51 @@ int vfe_flush_buffers(struct camss_video *vid,
 	if (output->last_buffer) {
 		vb2_buffer_done(&output->last_buffer->vb.vb2_buf, state);
 		output->last_buffer = NULL;
+	}
+
+	spin_unlock_irqrestore(&vfe->output_lock, flags);
+
+	return 0;
+}
+
+/*
+ * vfe_flush_stats_buffers - Return all vb2 stats buffers
+ * @stats: Stats device structure
+ * @state: vb2 buffer state of the returned buffers
+ *
+ * Return all buffers to vb2. This includes queued pending buffers (still
+ * unused) and any buffers given to the hardware but again still not used.
+ *
+ * Return 0 on success or a negative error code otherwise
+ */
+int vfe_flush_stats_buffers(struct camss_stats *stats,
+			    enum vb2_buffer_state state)
+{
+	struct vfe_device *vfe = container_of(stats, struct vfe_device, stats);
+	struct camss_stats_buffer *buf;
+	struct camss_stats_buffer *t;
+	unsigned long flags;
+	unsigned int i;
+
+	spin_lock_irqsave(&vfe->output_lock, flags);
+
+	list_for_each_entry_safe(buf, t, &vfe->pending_stats_bufs, queue) {
+		vb2_buffer_done(&buf->vb.vb2_buf, state);
+		list_del(&buf->queue);
+	}
+
+	for (i = 0; i < CAMSS_STATS_TYPE_MAX; i++) {
+		buf = vfe->stats_outputs[i].buf[0];
+		if (buf)
+			vb2_buffer_done(&buf->vb.vb2_buf, state);
+		buf = vfe->stats_outputs[i].buf[1];
+		if (buf)
+			vb2_buffer_done(&buf->vb.vb2_buf, state);
+		buf = vfe->stats_outputs[i].last_buffer;
+		if (buf) {
+			vb2_buffer_done(&buf->vb.vb2_buf, state);
+			vfe->stats_outputs[i].last_buffer = NULL;
+		}
 	}
 
 	spin_unlock_irqrestore(&vfe->output_lock, flags);
@@ -1388,6 +1465,9 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
 	vfe->id = id;
 	vfe->reg_update = 0;
 
+	vfe->stats.type = V4L2_BUF_TYPE_META_CAPTURE;
+	vfe->stats.camss = camss;
+
 	for (i = VFE_LINE_RDI0; i < vfe->line_num; i++) {
 		struct vfe_line *l = &vfe->line[i];
 
@@ -1643,9 +1723,35 @@ int msm_vfe_register_entities(struct vfe_device *vfe,
 				ret);
 			goto error_link;
 		}
+
+		if (i == VFE_LINE_PIX) {
+			vfe->stats.ops = &vfe->stats_ops;
+			snprintf(name, ARRAY_SIZE(name), "%s%d_%s%d",
+				 MSM_VFE_NAME, vfe->id, "stats", i);
+			ret = msm_stats_register(&vfe->stats, v4l2_dev, name);
+			if (ret < 0) {
+				dev_err(dev, "Failed to register stats node: %d\n",
+					ret);
+				goto error_link;
+			}
+
+			ret = media_create_pad_link(
+					&sd->entity, MSM_VFE_PAD_SRC,
+					&vfe->stats.vdev.entity, 0,
+					MEDIA_LNK_FL_IMMUTABLE | MEDIA_LNK_FL_ENABLED);
+			if (ret < 0) {
+				dev_err(dev, "Failed to link %s->%s entities: %d\n",
+					sd->entity.name, vfe->stats.vdev.entity.name,
+					ret);
+				goto error_link_stats;
+			}
+		}
 	}
 
 	return 0;
+
+error_link_stats:
+	msm_stats_unregister(&vfe->stats);
 
 error_link:
 	msm_video_unregister(video_out);
@@ -1664,8 +1770,10 @@ error_init:
 		msm_video_unregister(video_out);
 		v4l2_device_unregister_subdev(sd);
 		media_entity_cleanup(&sd->entity);
-		if (i == VFE_LINE_PIX)
+		if (i == VFE_LINE_PIX) {
 			v4l2_ctrl_handler_free(sd->ctrl_handler);
+			msm_stats_unregister(&vfe->stats);
+		}
 	}
 
 	return ret;
@@ -1689,7 +1797,9 @@ void msm_vfe_unregister_entities(struct vfe_device *vfe)
 		msm_video_unregister(video_out);
 		v4l2_device_unregister_subdev(sd);
 		media_entity_cleanup(&sd->entity);
-		if (i == VFE_LINE_PIX)
+		if (i == VFE_LINE_PIX) {
 			v4l2_ctrl_handler_free(sd->ctrl_handler);
+			msm_stats_unregister(&vfe->stats);
+		}
 	}
 }
