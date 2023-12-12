@@ -1030,14 +1030,14 @@ static int q6afe_port_set_param(struct q6afe_port *port, void *data,
 			       psize, port->token);
 }
 
-static int q6afe_port_set_param_v2(struct q6afe_port *port, void *data,
-				   int param_id, int module_id, int psize)
+static int q6afe_set_param_v2(struct q6afe *afe, struct q6afe_port *port,
+			      void *data, int param_id, int module_id, int psize,
+			      int token)
 {
 	struct afe_port_cmd_set_param_v2 *param;
 	struct afe_port_param_data_v2 *pdata;
-	struct q6afe *afe = port->afe;
 	struct apr_pkt *pkt;
-	u16 port_id = port->id;
+	u16 port_id = port ? port->id : 0;
 	int ret, pkt_size;
 	void *p, *pl;
 
@@ -1058,7 +1058,7 @@ static int q6afe_port_set_param_v2(struct q6afe_port *port, void *data,
 	pkt->hdr.pkt_size = pkt_size;
 	pkt->hdr.src_port = 0;
 	pkt->hdr.dest_port = 0;
-	pkt->hdr.token = port->token;
+	pkt->hdr.token = token;
 	pkt->hdr.opcode = AFE_PORT_CMD_SET_PARAM_V2;
 
 	param->port_id = port_id;
@@ -1077,6 +1077,13 @@ static int q6afe_port_set_param_v2(struct q6afe_port *port, void *data,
 
 	kfree(pkt);
 	return ret;
+}
+
+static int q6afe_port_set_param_v2(struct q6afe_port *port, void *data,
+				   int param_id, int module_id, int psize)
+{
+	return q6afe_set_param_v2(port->afe, port, data, param_id, module_id,
+				  psize, port->token);
 }
 
 static int q6afe_port_set_lpass_clock(struct q6afe_port *port,
@@ -1110,30 +1117,26 @@ int q6afe_set_lpass_clock(struct device *dev, int clk_id, int attri,
 	struct q6afe *afe = dev_get_drvdata(dev->parent);
 	struct afe_clk_set cset = {0,};
 
-	/*
-	 * v2 clocks specified in the device tree may not be supported by the
-	 * firmware. If this is the digital codec core clock, fall back to the
-	 * old method for setting it.
-	 */
 	if (q6core_get_adsp_version() < Q6_ADSP_VERSION_2_7) {
-		struct q6afe_port *port;
 		struct afe_digital_clk_cfg dcfg = {0,};
-		int ret;
 
-		if (clk_id != Q6AFE_LPASS_CLK_ID_INTERNAL_DIGITAL_CODEC_CORE)
-			return -EINVAL;
-
-		port = q6afe_port_get_from_id(dev, PRIMARY_MI2S_RX);
-		if (IS_ERR(port))
-			return PTR_ERR(port);
-
-		dcfg.i2s_cfg_minor_version = AFE_API_VERSION_I2S_CONFIG;
-		dcfg.clk_val = freq;
-		dcfg.clk_root = 5;
-		ret = q6afe_set_digital_codec_core_clock(port, &dcfg);
-
-		q6afe_port_put(port);
-		return ret;
+		switch (clk_id) {
+		/*
+		 * DSP firmware versions below 2.7 do not support configuring internal
+		 * digital codec core clk using AFE_PARAM_ID_CLOCK_SET
+		 */
+		case Q6AFE_LPASS_CLK_ID_INTERNAL_DIGITAL_CODEC_CORE:
+			dcfg.i2s_cfg_minor_version = AFE_API_VERSION_I2S_CONFIG;
+			dcfg.clk_val = freq;
+			dcfg.clk_root = 5;
+			return q6afe_set_param_v2(afe, NULL, &dcfg,
+						  AFE_PARAM_ID_INT_DIGITAL_CDC_CLK_CONFIG,
+						  AFE_MODULE_AUDIO_DEV_INTERFACE,
+						  sizeof(dcfg),
+						  AFE_CLK_TOKEN);
+		default:
+			break;
+		}
 	}
 
 	cset.clk_set_minor_version = AFE_API_VERSION_CLOCK_SET;
